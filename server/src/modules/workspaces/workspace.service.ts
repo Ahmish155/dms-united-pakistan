@@ -5,6 +5,7 @@ import {
   WorkspaceMemberModel,
   WorkspaceSettingsModel
 } from './workspace.model';
+import { UserModel } from '../auth/user.model';
 import { AccessRequestModel } from '../access/accessRequest.model';
 import { AuditLogModel } from '../audit/auditLog.model';
 import {
@@ -69,11 +70,58 @@ export class WorkspaceService {
       .populate('workspaceId')
       .lean();
 
-    return memberships.map((m: any) => ({
-      workspace: m.workspaceId,
-      role: m.role,
-      permissions: m.permissions
-    }));
+    const activeMemberships = memberships
+      .filter((m: any) => m.workspaceId && m.workspaceId.status !== 'ARCHIVED')
+      .map((m: any) => ({
+        workspace: m.workspaceId,
+        role: m.role,
+        permissions: m.permissions
+      }));
+
+    if (activeMemberships.length > 0) {
+      return activeMemberships;
+    }
+
+    // If the user has no workspaces (e.g. Super Admin or freshly created user),
+    // automatically provision their default Sector workspace so all views load immediately!
+    const user = await UserModel.findById(userId);
+    if (!user) {
+      return [];
+    }
+
+    const defaultName = user.systemRole === 'SUPER_ADMIN' 
+      ? 'Sector Central (Admin)' 
+      : `Sector ${user.name.split(' ')[0]}`;
+    const defaultCode = `SEC-${user._id.toString().substring(18).toUpperCase()}`;
+
+    const workspace = await WorkspaceModel.create({
+      name: defaultName,
+      code: defaultCode,
+      status: 'ACTIVE',
+      createdById: user._id
+    });
+
+    await WorkspaceSettingsModel.create({
+      workspaceId: workspace._id,
+      thresholds: DEFAULT_THRESHOLDS,
+      allowSpectatorExports: false
+    });
+
+    const newMember = await WorkspaceMemberModel.create({
+      workspaceId: workspace._id,
+      userId: user._id,
+      role: WorkspaceRole.SECTOR_SECRETARY,
+      grantedBy: user._id,
+      permissions: { canExportReports: true }
+    });
+
+    return [
+      {
+        workspace: workspace.toObject(),
+        role: newMember.role,
+        permissions: newMember.permissions
+      }
+    ];
   }
 
   static async getWorkspaceDetails(workspaceId: string) {

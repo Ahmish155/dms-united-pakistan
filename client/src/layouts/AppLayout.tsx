@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Outlet, Navigate, NavLink } from 'react-router-dom';
+import { Outlet, Navigate, NavLink, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { useWorkspace } from '../context/WorkspaceContext';
 import { Navbar } from '../components/Navbar';
@@ -36,6 +36,7 @@ export const AppLayout: React.FC = () => {
   const { user, isLoading: authLoading } = useAuth();
   const { activeWorkspace, isLoading: wsLoading } = useWorkspace();
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const location = useLocation();
 
   if (authLoading) {
     return (
@@ -62,14 +63,24 @@ export const AppLayout: React.FC = () => {
         <Sidebar />
 
         <main className="flex-1 pb-20 md:pb-8 p-4 md:p-6 max-w-7xl mx-auto w-full">
-          {!activeWorkspace && !wsLoading ? (
-            <div className="rounded-xl border border-surface-border bg-white p-6 text-center max-w-md mx-auto mt-12 shadow-sm">
+          {!activeWorkspace && !wsLoading && location.pathname !== '/admin' ? (
+            <div className="rounded-xl border border-surface-border bg-white p-6 text-center max-w-md mx-auto mt-12 shadow-sm space-y-4">
               <h3 className="text-base font-semibold text-typography-main">
                 No Sector Workspace Selected
               </h3>
-              <p className="mt-2 text-xs text-typography-secondary">
-                You do not currently have access to any active Sector Workspace. Please submit an access request or create one if you are an administrator.
+              <p className="text-xs text-typography-secondary">
+                You do not currently have access to an active Sector Workspace. If you are a Secretary Dawat or Super Admin, you can open the admin console or create a workspace.
               </p>
+              {user?.systemRole === 'SUPER_ADMIN' && (
+                <div className="pt-2 border-t border-surface-border">
+                  <NavLink
+                    to="/admin"
+                    className="inline-flex items-center gap-1.5 btn-primary text-xs py-2 px-3"
+                  >
+                    Open Super Admin Console
+                  </NavLink>
+                </div>
+              )}
             </div>
           ) : (
             <Outlet />
