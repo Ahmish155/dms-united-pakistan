@@ -45,11 +45,11 @@ export const createPersonSchema = z.object({
 
 export const recordMeetingSchema = z.object({
   personId: z.string(),
-  rabtakarId: z.string(),
-  primaryDaeenId: z.string(),
+  rabtakarId: z.string().optional(),
+  primaryDaeenId: z.string().optional(),
   additionalDaeenIds: z.array(z.string()).default([]),
   meetingDate: z.string(), // ISO date
-  meetingNumber: z.number().int().positive().default(1),
+  meetingNumber: z.number().int().positive().optional(),
   comments: z.string().optional()
 });
 
@@ -83,6 +83,8 @@ export const createRmmSchema = z.object({
   rmmDate: z.string(),
   weekStartDate: z.string(),
   weekEndDate: z.string(),
+  plannedMaduMeetings: z.number().int().nonnegative().default(0),
+  plannedMdfMeetings: z.number().int().nonnegative().default(0),
   comments: z.string().optional(),
   targets: z.array(rmmTargetSchema).default([])
 });

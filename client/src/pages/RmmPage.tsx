@@ -30,6 +30,8 @@ export const RmmPage: React.FC = () => {
   const [weekEndDate, setWeekEndDate] = useState(
     new Date(Date.now() + 6 * 24 * 60 * 60 * 1000).toISOString().split('T')[0]
   );
+  const [plannedMaduMeetings, setPlannedMaduMeetings] = useState<number>(0);
+  const [plannedMdfMeetings, setPlannedMdfMeetings] = useState<number>(0);
   const [comments, setComments] = useState('');
 
   // Target entries builder inside modal
@@ -119,8 +121,8 @@ export const RmmPage: React.FC = () => {
 
   const handleCreateRmm = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (targets.length === 0) {
-      alert('Please add at least one next-week target to this RMM.');
+    if (plannedMaduMeetings === 0 && plannedMdfMeetings === 0 && targets.length === 0) {
+      alert('Please enter planned meetings for the week or add targets.');
       return;
     }
 
@@ -130,12 +132,16 @@ export const RmmPage: React.FC = () => {
         rmmDate,
         weekStartDate,
         weekEndDate,
+        plannedMaduMeetings: Number(plannedMaduMeetings) || 0,
+        plannedMdfMeetings: Number(plannedMdfMeetings) || 0,
         comments: comments || undefined,
         targets
       });
 
       setCreateModalOpen(false);
       setTargets([]);
+      setPlannedMaduMeetings(0);
+      setPlannedMdfMeetings(0);
       setComments('');
       await fetchRmmList();
       setSelectedRmmId(created.rmm._id);
@@ -399,10 +405,48 @@ export const RmmPage: React.FC = () => {
                 </div>
               </div>
 
-              {/* Add Target Item Sub-form */}
-              <div className="rounded-lg border border-surface-border bg-surface-secondary/40 p-3 space-y-2">
+              {/* Aggregate Target Inputs (Simplified RMM Planning) */}
+              <div className="rounded-lg border border-surface-border bg-surface-secondary/40 p-3 space-y-3">
                 <span className="font-semibold text-xs text-typography-main block">
-                  Add Next-Week Target:
+                  Weekly Meeting Targets Set For Unit:
+                </span>
+                <p className="text-[11px] text-typography-secondary">
+                  Specify how many total meetings are planned for this week. Analytics will automatically track actual meetings held by the end of the week.
+                </p>
+                <div className="grid grid-cols-2 gap-3">
+                  <div>
+                    <label className="block text-[11px] font-semibold text-typography-main mb-1">
+                      Planned Madu Meetings
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={plannedMaduMeetings}
+                      onChange={(e) => setPlannedMaduMeetings(parseInt(e.target.value, 10) || 0)}
+                      className="input-field text-xs py-1.5"
+                      placeholder="e.g. 10"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-[11px] font-semibold text-typography-main mb-1">
+                      Planned MDF Meetings
+                    </label>
+                    <input
+                      type="number"
+                      min={0}
+                      value={plannedMdfMeetings}
+                      onChange={(e) => setPlannedMdfMeetings(parseInt(e.target.value, 10) || 0)}
+                      className="input-field text-xs py-1.5"
+                      placeholder="e.g. 5"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* Optional: Add Target Item Sub-form */}
+              <div className="rounded-lg border border-surface-border bg-surface-secondary/20 p-3 space-y-2">
+                <span className="font-semibold text-xs text-typography-secondary block">
+                  Optional: Specific Person Targets (If Desired)
                 </span>
                 <div className="grid grid-cols-1 sm:grid-cols-3 gap-2">
                   <select

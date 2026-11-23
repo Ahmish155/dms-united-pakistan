@@ -63,6 +63,42 @@ export class AuthService {
     };
   }
 
+  static async firebaseLogin(data: { email: string; name?: string; idToken?: string }) {
+    if (!data.email) {
+      throw new AppError('Valid email required for Firebase authentication', 400);
+    }
+
+    const email = data.email.toLowerCase();
+    let user = await UserModel.findOne({ email });
+
+    if (!user) {
+      // Auto-provision user account for authenticated Firebase user
+      const dummyHash = await bcrypt.hash(`firebase_${Date.now()}_auth`, 10);
+      user = await UserModel.create({
+        name: data.name || email.split('@')[0],
+        email,
+        passwordHash: dummyHash,
+        systemRole: SystemRole.STANDARD_USER,
+        status: 'ACTIVE'
+      });
+    }
+
+    if (user.status !== 'ACTIVE') {
+      throw new AppError('User account suspended', 403);
+    }
+
+    const token = this.generateToken(user);
+    return {
+      token,
+      user: {
+        id: user._id.toString(),
+        name: user.name,
+        email: user.email,
+        systemRole: user.systemRole
+      }
+    };
+  }
+
   static generateToken(user: IUserDoc) {
     return jwt.sign(
       {

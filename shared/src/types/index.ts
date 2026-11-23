@@ -135,6 +135,9 @@ export interface IRmm {
   rmmDate: string;
   weekStartDate: string;
   weekEndDate: string;
+  plannedMaduMeetings?: number;
+  plannedMdfMeetings?: number;
+  totalPlannedMeetings?: number;
   comments?: string;
   createdById: string;
 }

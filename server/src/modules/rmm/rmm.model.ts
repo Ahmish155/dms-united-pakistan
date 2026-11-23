@@ -7,6 +7,8 @@ export interface IRmmDoc extends Document {
   rmmDate: Date;
   weekStartDate: Date;
   weekEndDate: Date;
+  plannedMaduMeetings: number;
+  plannedMdfMeetings: number;
   comments?: string;
   createdById: Types.ObjectId;
   createdAt: Date;
@@ -38,6 +40,16 @@ const RmmSchema = new Schema<IRmmDoc>(
     weekEndDate: {
       type: Date,
       required: true
+    },
+    plannedMaduMeetings: {
+      type: Number,
+      required: true,
+      default: 0
+    },
+    plannedMdfMeetings: {
+      type: Number,
+      required: true,
+      default: 0
     },
     comments: {
       type: String

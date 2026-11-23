@@ -31,7 +31,6 @@ export const RecordMeetingPage: React.FC = () => {
   const [meetingDate, setMeetingDate] = useState(
     new Date().toISOString().split('T')[0]
   );
-  const [meetingNumber, setMeetingNumber] = useState<number>(1);
   const [comments, setComments] = useState('');
 
   const [submitting, setSubmitting] = useState(false);
@@ -79,10 +78,6 @@ export const RecordMeetingPage: React.FC = () => {
       if (person.defaultDaeenId?._id) {
         setPrimaryDaeenId(person.defaultDaeenId._id);
       }
-
-      // Next meeting number calculation
-      const pastMeetingsCount = person.meetingsCount || 0;
-      setMeetingNumber(pastMeetingsCount + 1);
     }
   };
 
@@ -98,7 +93,6 @@ export const RecordMeetingPage: React.FC = () => {
         primaryDaeenId,
         additionalDaeenIds,
         meetingDate: new Date(meetingDate).toISOString(),
-        meetingNumber,
         comments: comments || undefined,
         allowDuplicate
       });
@@ -295,34 +289,21 @@ export const RecordMeetingPage: React.FC = () => {
             </div>
           </div>
 
-          {/* 6. Date & Meeting Number */}
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-semibold text-typography-main mb-1">
-                Meeting Date *
-              </label>
-              <input
-                type="date"
-                required
-                value={meetingDate}
-                onChange={(e) => setMeetingDate(e.target.value)}
-                className="input-field text-xs"
-              />
-            </div>
-
-            <div>
-              <label className="block text-xs font-semibold text-typography-main mb-1">
-                Meeting Number *
-              </label>
-              <input
-                type="number"
-                min={1}
-                required
-                value={meetingNumber}
-                onChange={(e) => setMeetingNumber(parseInt(e.target.value, 10))}
-                className="input-field text-xs"
-              />
-            </div>
+          {/* 6. Date */}
+          <div>
+            <label className="block text-xs font-semibold text-typography-main mb-1">
+              Meeting Date *
+            </label>
+            <input
+              type="date"
+              required
+              value={meetingDate}
+              onChange={(e) => setMeetingDate(e.target.value)}
+              className="input-field text-xs"
+            />
+            <p className="mt-1 text-[11px] text-typography-secondary">
+              Meeting number will be automatically calculated based on prior recorded meetings.
+            </p>
           </div>
 
           {/* 7. Comments */}

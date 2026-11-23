@@ -13,8 +13,10 @@ export class RmmService {
       rmmDate: string;
       weekStartDate: string;
       weekEndDate: string;
+      plannedMaduMeetings?: number;
+      plannedMdfMeetings?: number;
       comments?: string;
-      targets: Array<{
+      targets?: Array<{
         personId: string;
         category: PersonStage;
         nextWeekTarget: number;
@@ -23,12 +25,17 @@ export class RmmService {
     },
     userId: string
   ) {
+    const plannedMadu = data.plannedMaduMeetings || 0;
+    const plannedMdf = data.plannedMdfMeetings || 0;
+
     const rmm = await RmmModel.create({
       workspaceId: new Types.ObjectId(workspaceId),
       unitId: new Types.ObjectId(data.unitId),
       rmmDate: new Date(data.rmmDate),
       weekStartDate: new Date(data.weekStartDate),
       weekEndDate: new Date(data.weekEndDate),
+      plannedMaduMeetings: plannedMadu,
+      plannedMdfMeetings: plannedMdf,
       comments: data.comments,
       createdById: new Types.ObjectId(userId)
     });
@@ -52,7 +59,12 @@ export class RmmService {
       action: 'RMM_CREATED',
       entityType: 'Rmm',
       entityId: rmm._id,
-      newState: { unitId: data.unitId, targetCount: data.targets?.length || 0 }
+      newState: {
+        unitId: data.unitId,
+        plannedMadu,
+        plannedMdf,
+        targetCount: data.targets?.length || 0
+      }
     });
 
     return this.getRmmProgress(workspaceId, rmm._id.toString());
@@ -103,21 +115,30 @@ export class RmmService {
       .populate('personId', 'fullName internalId')
       .lean();
 
-    // Query actual completed meetings in this week window
+    // Query actual completed meetings in this week window for this unit
     const meetings = await IndividualMeetingModel.find({
       workspaceId: new Types.ObjectId(workspaceId),
+      unitId: rmm.unitId,
       meetingDate: { $gte: startOfWeek, $lte: endOfWeek }
     }).lean();
 
     const personMeetingCount = new Map<string, number>();
+    let actualMaduHeld = 0;
+    let actualMdfHeld = 0;
+
     for (const m of meetings) {
       const pid = m.personId.toString();
       personMeetingCount.set(pid, (personMeetingCount.get(pid) || 0) + 1);
+      if (m.personStageAtMeeting === PersonStage.MADU) {
+        actualMaduHeld += 1;
+      } else if (m.personStageAtMeeting === PersonStage.MDF) {
+        actualMdfHeld += 1;
+      }
     }
 
-    let totalPlannedMadu = 0;
-    let totalPlannedMdf = 0;
-    let totalActualCompleted = 0;
+    let totalPlannedMadu = rmm.plannedMaduMeetings || 0;
+    let totalPlannedMdf = rmm.plannedMdfMeetings || 0;
+    let totalActualCompleted = meetings.length;
 
     const calculatedTargets = targets.map((t: any) => {
       const pid = t.personId?._id?.toString() || t.personId?.toString();
@@ -131,12 +152,12 @@ export class RmmService {
           ? 100
           : 0;
 
-      if (t.category === PersonStage.MADU) {
+      // Only accumulate from person rows if planned aggregate was 0
+      if ((rmm.plannedMaduMeetings || 0) === 0 && t.category === PersonStage.MADU) {
         totalPlannedMadu += plannedTarget;
-      } else if (t.category === PersonStage.MDF) {
+      } else if ((rmm.plannedMdfMeetings || 0) === 0 && t.category === PersonStage.MDF) {
         totalPlannedMdf += plannedTarget;
       }
-      totalActualCompleted += actualMeetings;
 
       return {
         ...t,
@@ -160,6 +181,8 @@ export class RmmService {
         totalPlanned,
         totalPlannedMadu,
         totalPlannedMdf,
+        actualMaduHeld,
+        actualMdfHeld,
         totalActualCompleted,
         totalRemaining: Math.max(0, totalPlanned - totalActualCompleted),
         overallCompletionPercentage

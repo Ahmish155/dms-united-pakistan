@@ -9,5 +9,6 @@ router.use(requireAuth);
 router.use(requireWorkspace);
 
 router.get('/overview', ActivityController.getOverview);
+router.get('/dashboard', ActivityController.getDashboard);
 
 export const activityRoutes = router;

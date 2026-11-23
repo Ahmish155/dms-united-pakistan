@@ -10,69 +10,58 @@ import {
   TrendingUp,
   Building2,
   Plus,
-  MessageSquare,
-  FileText
+  Clock,
+  CheckCircle2,
+  Shield,
+  Layers
 } from 'lucide-react';
 import { Link } from 'react-router-dom';
 
 export const DashboardPage: React.FC = () => {
   const { activeWorkspace } = useWorkspace();
 
-  const [activityOverview, setActivityOverview] = useState<any | null>(null);
-  const [units, setUnits] = useState<any[]>([]);
+  const [period, setPeriod] = useState<'weekly' | 'monthly' | 'till_month_start'>('monthly');
+  const [dashboardData, setDashboardData] = useState<any | null>(null);
   const [recentMeetings, setRecentMeetings] = useState<any[]>([]);
-  const [weeklyReport, setWeeklyReport] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    const fetchDashboard = async () => {
-      try {
-        setLoading(true);
-
-        const defaultEnd = new Date();
-        const defaultStart = new Date();
-        defaultStart.setDate(defaultStart.getDate() - 7);
-
-        const startStr = defaultStart.toISOString().split('T')[0];
-        const endStr = defaultEnd.toISOString().split('T')[0];
-
-        const [overview, unitsData, meetingsData, reportData] =
-          await Promise.all([
-            ApiService.get<any>('/activity/overview'),
-            ApiService.get<any[]>('/units'),
-            ApiService.get<any[]>('/meetings'),
-            ApiService.get<any>(
-              `/reports/weekly?startDate=${startStr}&endDate=${endStr}`
-            )
-          ]);
-
-        setActivityOverview(overview);
-        setUnits(unitsData);
-        setRecentMeetings(meetingsData.slice(0, 5));
-        setWeeklyReport(reportData);
-      } catch (err: any) {
-        console.error('Failed to load dashboard:', err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    if (activeWorkspace) {
-      fetchDashboard();
+  const fetchDashboard = async (selectedPeriod: string) => {
+    try {
+      setLoading(true);
+      const [dash, meetingsData] = await Promise.all([
+        ApiService.get<any>(`/activity/dashboard?period=${selectedPeriod}`),
+        ApiService.get<any[]>('/meetings')
+      ]);
+      setDashboardData(dash);
+      setRecentMeetings(meetingsData.slice(0, 5));
+    } catch (err: any) {
+      console.error('Failed to load dashboard:', err);
+    } finally {
+      setLoading(false);
     }
-  }, [activeWorkspace]);
-
-  const counts = activityOverview?.counts || {
-    totalMadu: 0,
-    activeMadu: 0,
-    inactiveMadu: 0,
-    totalMdf: 0,
-    activeMdf: 0,
-    inactiveMdf: 0,
-    totalRabtakar: 0,
-    activeRabtakar: 0,
-    inactiveRabtakar: 0
   };
+
+  useEffect(() => {
+    if (activeWorkspace) {
+      fetchDashboard(period);
+    }
+  }, [activeWorkspace, period]);
+
+  const sector = dashboardData?.sector || {
+    expectedMeetings: 0,
+    heldMeetings: 0,
+    completionRate: 0,
+    activeRabtakar: 0,
+    totalRabtakar: 0,
+    activeMadu: 0,
+    totalMadu: 0,
+    activeMdf: 0,
+    totalMdf: 0,
+    activeDaeen: 0,
+    totalDaeen: 0
+  };
+
+  const unitsList = dashboardData?.units || [];
 
   return (
     <div className="space-y-6">
@@ -88,9 +77,43 @@ export const DashboardPage: React.FC = () => {
         </div>
 
         <div className="flex items-center gap-2">
+          {/* Period Selector Toggle */}
+          <div className="inline-flex rounded-lg border border-surface-border bg-white p-0.5 shadow-sm text-xs">
+            <button
+              onClick={() => setPeriod('weekly')}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                period === 'weekly'
+                  ? 'bg-brand-red text-white'
+                  : 'text-typography-secondary hover:text-typography-main'
+              }`}
+            >
+              Weekly (7d)
+            </button>
+            <button
+              onClick={() => setPeriod('monthly')}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                period === 'monthly'
+                  ? 'bg-brand-red text-white'
+                  : 'text-typography-secondary hover:text-typography-main'
+              }`}
+            >
+              Monthly
+            </button>
+            <button
+              onClick={() => setPeriod('till_month_start')}
+              className={`px-2.5 py-1 rounded-md font-medium transition-colors ${
+                period === 'till_month_start'
+                  ? 'bg-brand-red text-white'
+                  : 'text-typography-secondary hover:text-typography-main'
+              }`}
+            >
+              Till Start of Month
+            </button>
+          </div>
+
           <Link
             to="/meetings/new"
-            className="btn-primary gap-1.5 text-xs py-2 shadow-sm"
+            className="btn-primary gap-1.5 text-xs py-1.5 px-3 shadow-sm"
           >
             <Plus className="h-4 w-4" />
             <span>Record Meeting</span>
@@ -98,165 +121,250 @@ export const DashboardPage: React.FC = () => {
         </div>
       </div>
 
-      {/* Primary KPI Grid (Part 12.1) */}
-      <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
-        {/* Madu Card */}
-        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-typography-secondary mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Madu</span>
-            <Users className="h-4 w-4 text-brand-red" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-typography-main">
-              {counts.totalMadu}
-            </span>
-            <span className="text-xs text-typography-secondary">total</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-surface-border pt-2 text-xs">
-            <span className="flex items-center gap-1 text-status-success font-medium">
-              <UserCheck className="h-3 w-3" /> {counts.activeMadu} Active
-            </span>
-            <span className="flex items-center gap-1 text-status-warning font-medium">
-              <UserX className="h-3 w-3" /> {counts.inactiveMadu} Inactive
-            </span>
-          </div>
+      {loading && !dashboardData ? (
+        <div className="py-12 text-center text-xs text-typography-secondary">
+          Loading dashboard metrics...
         </div>
-
-        {/* MDF Card */}
-        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-typography-secondary mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">MDF</span>
-            <TrendingUp className="h-4 w-4 text-brand-red" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-typography-main">
-              {counts.totalMdf}
-            </span>
-            <span className="text-xs text-typography-secondary">total</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-surface-border pt-2 text-xs">
-            <span className="flex items-center gap-1 text-status-success font-medium">
-              <UserCheck className="h-3 w-3" /> {counts.activeMdf} Active
-            </span>
-            <span className="flex items-center gap-1 text-status-warning font-medium">
-              <UserX className="h-3 w-3" /> {counts.inactiveMdf} Inactive
-            </span>
-          </div>
-        </div>
-
-        {/* Rabtakar Card */}
-        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-typography-secondary mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">Rabtakar</span>
-            <UserCheck className="h-4 w-4 text-brand-red" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-typography-main">
-              {counts.totalRabtakar}
-            </span>
-            <span className="text-xs text-typography-secondary">total</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-surface-border pt-2 text-xs">
-            <span className="flex items-center gap-1 text-status-success font-medium">
-              {counts.activeRabtakar} with active Madu
-            </span>
-            <span className="flex items-center gap-1 text-status-warning font-medium">
-              {counts.inactiveRabtakar} inactive
-            </span>
-          </div>
-        </div>
-
-        {/* Weekly Activities Progress Card */}
-        <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
-          <div className="flex items-center justify-between text-typography-secondary mb-2">
-            <span className="text-xs font-semibold uppercase tracking-wider">7-Day IMs</span>
-            <CalendarCheck className="h-4 w-4 text-brand-red" />
-          </div>
-          <div className="flex items-baseline gap-2">
-            <span className="text-2xl font-bold text-brand-red">
-              {weeklyReport?.weekly?.ims || 0}
-            </span>
-            <span className="text-xs text-typography-secondary">completed</span>
-          </div>
-          <div className="mt-3 flex items-center justify-between border-t border-surface-border pt-2 text-xs text-typography-secondary">
-            <span>DFs: <strong>{weeklyReport?.weekly?.dfs || 0}</strong></span>
-            <span>GMs: <strong>{weeklyReport?.weekly?.gms || 0}</strong></span>
-            <span>RMMs: <strong>{weeklyReport?.weekly?.rmms || 0}</strong></span>
-          </div>
-        </div>
-      </div>
-
-      {/* Units Performance */}
-      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-4">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <Building2 className="h-4 w-4 text-brand-red" />
-            <h2 className="text-sm font-semibold text-typography-main">Units Performance</h2>
-          </div>
-          <Link to="/units" className="text-xs font-medium text-brand-red hover:underline">
-            View All Units
-          </Link>
-        </div>
-
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          {units.map((unit) => (
-            <div key={unit._id} className="rounded-lg border border-surface-border p-3.5 bg-surface-secondary/40 space-y-2">
-              <div className="flex items-center justify-between">
-                <span className="font-bold text-xs text-typography-main">{unit.name}</span>
-                <span className="text-[10px] font-mono bg-white px-1.5 py-0.5 rounded border border-surface-border">
-                  {unit.code}
-                </span>
+      ) : (
+        <>
+          {/* SECTION 1: OVERALL SECTOR PROGRESS */}
+          <div className="space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Target className="h-4 w-4 text-brand-red" />
+                <h2 className="text-sm font-bold text-typography-main uppercase tracking-wide">
+                  Overall Sector Progress
+                </h2>
               </div>
-              <div className="text-[11px] text-typography-secondary">
-                <span>President: </span>
-                <span className="font-medium text-typography-main">
-                  {unit.presidentPersonId?.fullName || 'Unassigned'}
-                </span>
+              <span className="text-[11px] font-medium text-typography-secondary">
+                Period: <span className="capitalize font-semibold text-typography-main">{period.replace('_', ' ')}</span>
+              </span>
+            </div>
+
+            {/* Sector Progress Cards */}
+            <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+              {/* Expected vs Held Meetings */}
+              <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm col-span-2 sm:col-span-1">
+                <div className="text-[11px] font-semibold uppercase text-typography-secondary">
+                  Meetings (Expected vs Held)
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-black text-brand-red">
+                    {sector.heldMeetings}
+                  </span>
+                  <span className="text-xs text-typography-secondary">
+                    / {sector.expectedMeetings} expected
+                  </span>
+                </div>
+                <div className="mt-2 flex items-center justify-between text-xs border-t border-surface-border pt-1.5">
+                  <span className="text-typography-secondary">Completion Rate</span>
+                  <span className="font-bold text-status-success">
+                    {sector.completionRate}%
+                  </span>
+                </div>
+              </div>
+
+              {/* Active Rabtakar */}
+              <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-typography-secondary">
+                  <span>Active Rabtakars</span>
+                  <UserCheck className="h-3.5 w-3.5 text-brand-red" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-typography-main">
+                    {sector.activeRabtakar}
+                  </span>
+                  <span className="text-xs text-typography-secondary">
+                    / {sector.totalRabtakar} total
+                  </span>
+                </div>
+                <div className="mt-2 text-[11px] text-typography-secondary border-t border-surface-border pt-1.5">
+                  {sector.totalRabtakar - sector.activeRabtakar} currently inactive
+                </div>
+              </div>
+
+              {/* Active Madu */}
+              <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-typography-secondary">
+                  <span>Active Madu</span>
+                  <Users className="h-3.5 w-3.5 text-brand-red" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-typography-main">
+                    {sector.activeMadu}
+                  </span>
+                  <span className="text-xs text-typography-secondary">
+                    / {sector.totalMadu} total
+                  </span>
+                </div>
+                <div className="mt-2 text-[11px] text-typography-secondary border-t border-surface-border pt-1.5">
+                  {sector.totalMadu - sector.activeMadu} currently inactive
+                </div>
+              </div>
+
+              {/* Active MDF */}
+              <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm">
+                <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-typography-secondary">
+                  <span>Active MDF</span>
+                  <TrendingUp className="h-3.5 w-3.5 text-brand-red" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-typography-main">
+                    {sector.activeMdf}
+                  </span>
+                  <span className="text-xs text-typography-secondary">
+                    / {sector.totalMdf} total
+                  </span>
+                </div>
+                <div className="mt-2 text-[11px] text-typography-secondary border-t border-surface-border pt-1.5">
+                  {sector.totalMdf - sector.activeMdf} currently inactive
+                </div>
+              </div>
+
+              {/* Active Daeens (Sector Level Only) */}
+              <div className="rounded-xl border border-surface-border bg-white p-4 shadow-sm col-span-2 sm:col-span-1">
+                <div className="flex items-center justify-between text-[11px] font-semibold uppercase text-typography-secondary">
+                  <span>Active Daeens</span>
+                  <Shield className="h-3.5 w-3.5 text-brand-red" />
+                </div>
+                <div className="mt-1 flex items-baseline gap-2">
+                  <span className="text-2xl font-bold text-typography-main">
+                    {sector.activeDaeen}
+                  </span>
+                  <span className="text-xs text-typography-secondary">
+                    / {sector.totalDaeen} sector-wide
+                  </span>
+                </div>
+                <div className="mt-2 text-[11px] text-typography-muted italic border-t border-surface-border pt-1.5">
+                  Sector resource (not unit-bound)
+                </div>
               </div>
             </div>
-          ))}
-        </div>
-      </div>
-
-      {/* Recent Meetings */}
-      <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
-        <div className="flex items-center justify-between">
-          <div className="flex items-center gap-2">
-            <CalendarCheck className="h-4 w-4 text-brand-red" />
-            <h2 className="text-sm font-bold text-typography-main">Recent Meetings</h2>
           </div>
-          <Link to="/meetings" className="text-xs font-medium text-brand-red hover:underline">
-            View All Meetings
-          </Link>
-        </div>
 
-        {recentMeetings.length === 0 ? (
-          <p className="text-xs text-typography-secondary py-3 italic">
-            No completed meetings recorded yet.
-          </p>
-        ) : (
-          <div className="divide-y divide-surface-border">
-            {recentMeetings.map((m) => (
-              <div key={m._id} className="py-2.5 flex items-center justify-between text-xs">
-                <div>
-                  <span className="font-bold text-typography-main">
-                    {m.personId?.fullName}
-                  </span>
-                  <span className="text-typography-secondary ml-2">
-                    ({m.unitId?.name})
-                  </span>
-                  <div className="text-[11px] text-typography-secondary">
-                    Daeen: {m.primaryDaeenId?.fullName} • Meeting #{m.meetingNumber}
-                  </div>
-                </div>
-                <span className="font-mono text-[11px] text-typography-secondary">
-                  {new Date(m.meetingDate).toLocaleDateString()}
-                </span>
+          {/* SECTION 2: OVERALL UNIT PROGRESS BREAKDOWN */}
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-4">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Building2 className="h-4 w-4 text-brand-red" />
+                <h2 className="text-sm font-bold text-typography-main uppercase tracking-wide">
+                  Overall Unit Progress Breakdown
+                </h2>
               </div>
-            ))}
+              <span className="text-[11px] text-typography-secondary italic">
+                * Note: Rabtakars serve cross-unit; Madu belong to specific unit; Daeens excluded from units.
+              </span>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface-secondary/70 text-typography-secondary border-b border-surface-border">
+                  <tr>
+                    <th className="p-3">Unit</th>
+                    <th className="p-3">Expected Mtgs</th>
+                    <th className="p-3">Held Mtgs</th>
+                    <th className="p-3">Completion</th>
+                    <th className="p-3">Active / Total Rabtakars</th>
+                    <th className="p-3">Active / Total Madu</th>
+                    <th className="p-3">Active / Total MDF</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-border">
+                  {unitsList.length === 0 ? (
+                    <tr>
+                      <td colSpan={7} className="p-4 text-center text-typography-muted italic">
+                        No units found in this sector.
+                      </td>
+                    </tr>
+                  ) : (
+                    unitsList.map((u: any) => (
+                      <tr key={u.unitId} className="hover:bg-gray-50">
+                        <td className="p-3">
+                          <span className="font-bold text-typography-main">{u.name}</span>
+                          <span className="ml-1.5 text-[10px] font-mono uppercase text-typography-secondary bg-surface-secondary px-1.5 py-0.5 rounded">
+                            {u.code}
+                          </span>
+                        </td>
+                        <td className="p-3 font-semibold text-typography-secondary">
+                          {u.expectedMeetings}
+                        </td>
+                        <td className="p-3 font-bold text-brand-red">
+                          {u.heldMeetings}
+                        </td>
+                        <td className="p-3">
+                          <span
+                            className={`inline-block font-semibold rounded px-1.5 py-0.5 text-[11px] ${
+                              u.completionRate >= 100
+                                ? 'bg-green-100 text-status-success'
+                                : u.completionRate >= 50
+                                ? 'bg-amber-100 text-amber-700'
+                                : 'bg-gray-100 text-typography-secondary'
+                            }`}
+                          >
+                            {u.completionRate}%
+                          </span>
+                        </td>
+                        <td className="p-3 font-medium text-typography-main">
+                          <span className="text-status-success font-bold">{u.activeRabtakar}</span>
+                          <span className="text-typography-secondary"> / {u.totalRabtakar}</span>
+                        </td>
+                        <td className="p-3 font-medium text-typography-main">
+                          <span className="text-status-success font-bold">{u.activeMadu}</span>
+                          <span className="text-typography-secondary"> / {u.totalMadu}</span>
+                        </td>
+                        <td className="p-3 font-medium text-typography-main">
+                          <span className="text-status-success font-bold">{u.activeMdf}</span>
+                          <span className="text-typography-secondary"> / {u.totalMdf}</span>
+                        </td>
+                      </tr>
+                    ))
+                  )}
+                </tbody>
+              </table>
+            </div>
           </div>
-        )}
-      </div>
+
+          {/* SECTION 3: RECENT MEETINGS */}
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-brand-red" />
+                <h2 className="text-sm font-bold text-typography-main">Recent Completed Meetings</h2>
+              </div>
+              <Link to="/meetings" className="text-xs font-medium text-brand-red hover:underline">
+                View All Meetings
+              </Link>
+            </div>
+
+            {recentMeetings.length === 0 ? (
+              <p className="text-xs text-typography-secondary py-3 italic">
+                No completed meetings recorded yet.
+              </p>
+            ) : (
+              <div className="divide-y divide-surface-border">
+                {recentMeetings.map((m) => (
+                  <div key={m._id} className="py-2.5 flex items-center justify-between text-xs">
+                    <div>
+                      <span className="font-bold text-typography-main">
+                        {m.personId?.fullName}
+                      </span>
+                      <span className="text-typography-secondary ml-2">
+                        ({m.unitId?.name})
+                      </span>
+                      <div className="text-[11px] text-typography-secondary">
+                        Rabtakar: {m.rabtakarId?.fullName} • Daeen: {m.primaryDaeenId?.fullName} • Meeting #{m.meetingNumber}
+                      </div>
+                    </div>
+                    <span className="font-mono text-[11px] text-typography-secondary">
+                      {new Date(m.meetingDate).toLocaleDateString()}
+                    </span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </>
+      )}
     </div>
   );
 };
