@@ -5,6 +5,19 @@ All notable changes to the **Dawati Management System (DMS)** will be documented
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [0.1.0-alpha.3] - 2026-11-23
+
+### Added
+- Individual Meeting Management module with mobile-first meeting logger (`RecordMeetingPage`), duplicate meeting detection warning, and meeting history viewer (`MeetingsPage`).
+- DMM (Monthly Dawati Management Meeting) module (`DmmPage`): target entries, unit-wise conclusions, expected MSC/MDF count, and real-time monthly variance calculations.
+- RMM (Weekly Planning Module) (`RmmPage`): weekly target setting, expected meeting day attribution, and weekly actual vs planned progress tracking.
+- Dialogue Forums (DF) and Group Meetings (GM) modules (`ActivitiesPage`): DF mentor directory, session logging, participant attendance checklists, and independent participation analytics.
+- Executive Reporting & Multi-Format Exports (`ReportsPage`): Weekly Dawati Report generator matching United Pakistan standard format, 1-click WhatsApp text clipboard copy, Word (.doc), Excel (.csv), Plain Text, and Print exports.
+- Visual Sector Analytics & Trends (`AnalyticsPage`): Recharts bar chart for unit meeting comparisons and pie chart for people activity status health.
+- Workspace Settings & Spectator Management (`SettingsPage`): Configurable threshold sliders, spectator report export toggle, spectator invite link generator, and access request queue.
+- Real-time Executive Dashboard (`DashboardPage`) querying live activity overview, recent meetings, and 7-day operational progress.
+- 7 integration test suites with 18/18 passing tests in in-memory MongoDB.
+
 ## [0.1.0-alpha.2] - 2026-11-23
 
 ### Added

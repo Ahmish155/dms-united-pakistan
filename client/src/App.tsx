@@ -9,6 +9,14 @@ import { DashboardPage } from './pages/DashboardPage';
 import { UnitsPage } from './pages/UnitsPage';
 import { PeoplePage } from './pages/PeoplePage';
 import { PersonProfilePage } from './pages/PersonProfilePage';
+import { MeetingsPage } from './pages/MeetingsPage';
+import { RecordMeetingPage } from './pages/RecordMeetingPage';
+import { DmmPage } from './pages/DmmPage';
+import { RmmPage } from './pages/RmmPage';
+import { ActivitiesPage } from './pages/ActivitiesPage';
+import { ReportsPage } from './pages/ReportsPage';
+import { AnalyticsPage } from './pages/AnalyticsPage';
+import { SettingsPage } from './pages/SettingsPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -18,15 +26,6 @@ const queryClient = new QueryClient({
     }
   }
 });
-
-const ModulePlaceholder: React.FC<{ title: string }> = ({ title }) => (
-  <div className="rounded-xl border border-surface-border bg-white p-6 shadow-sm">
-    <h2 className="text-base font-bold text-typography-main">{title}</h2>
-    <p className="mt-1 text-xs text-typography-secondary">
-      This module is scheduled for implementation in upcoming sprints according to the Master Blueprint.
-    </p>
-  </div>
-);
 
 export const App: React.FC = () => {
   return (
@@ -42,13 +41,24 @@ export const App: React.FC = () => {
                 <Route path="units" element={<UnitsPage />} />
                 <Route path="people" element={<PeoplePage />} />
                 <Route path="people/:id" element={<PersonProfilePage />} />
-                <Route path="meetings/*" element={<ModulePlaceholder title="Individual Meetings Management" />} />
-                <Route path="dmm/*" element={<ModulePlaceholder title="DMM Monthly Planning" />} />
-                <Route path="rmm/*" element={<ModulePlaceholder title="RMM Weekly Planning" />} />
-                <Route path="activities/*" element={<ModulePlaceholder title="Dialogue Forums & Group Meetings" />} />
-                <Route path="analytics/*" element={<ModulePlaceholder title="Analytics & Insights" />} />
-                <Route path="reports/*" element={<ModulePlaceholder title="Reporting & Multi-Format Exports" />} />
-                <Route path="settings/*" element={<ModulePlaceholder title="Workspace Settings & Spectators" />} />
+
+                {/* Meetings */}
+                <Route path="meetings" element={<MeetingsPage />} />
+                <Route path="meetings/new" element={<RecordMeetingPage />} />
+
+                {/* Planning */}
+                <Route path="dmm" element={<DmmPage />} />
+                <Route path="rmm" element={<RmmPage />} />
+
+                {/* Activities (DF & GM) */}
+                <Route path="activities" element={<ActivitiesPage />} />
+
+                {/* Reports & Analytics */}
+                <Route path="reports" element={<ReportsPage />} />
+                <Route path="analytics" element={<AnalyticsPage />} />
+
+                {/* Settings & Spectators */}
+                <Route path="settings" element={<SettingsPage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />

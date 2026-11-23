@@ -26,22 +26,25 @@ The **Dawati Management System (DMS)** is a centralized organizational managemen
 - **MSC**: Reporting/promotion category (pending final organizational definition)
 
 ## Current Status
-- **Current Milestone**: Sprint 2 (Organizational Management) & Sprint 3 (Promotions, Unit Transfers & Dynamic Activity Engine) Completed.
+- **Current Milestone**: Core Modules Complete (Sprints 0 through 8 Implemented & Verified).
 - **Git Repository**: Initialized with `main` branch.
 - **Completed Modules**:
   - `@dms/shared`: Core TypeScript interfaces, organizational constants, Zod validation schemas.
-  - `@dms/server`: Express.js backend with Mongoose ODM, Helmet security headers, Rate Limiting, CORS, JWT Authentication, and strict multi-tenant isolation middleware (`workspaceScope.ts`).
-  - **Units Module**: Unit CRUD, unique name/code validation per sector, leadership assignment (Unit President & General Secretary).
+  - `@dms/server`: Express.js backend with Mongoose ODM, Helmet, Rate Limiting, CORS, JWT Authentication, and multi-tenant isolation middleware (`workspaceScope.ts`).
+  - **Units Module**: Unit CRUD, unique name/code per sector, leadership assignment (Unit President & General Secretary).
   - **People Module**: Centralized directory, unique internal ID generation (`UP-XXXX`), multi-role assignment (Rabtakar, Daeen, Mentor, Unit officeholders), primary Rabtakar & default Daeen assignment.
-  - **Promotion Workflows**: Madu $\to$ MDF and MDF $\to$ Rabtakar with historical preservation in `PromotionHistoryModel` and audit logs.
-  - **Unit Transfer Engine**: Unit transfers with complete historical lock in `UnitAssignmentHistoryModel` guaranteeing past meetings remain attributed to past units.
+  - **Promotions & Transfers**: Madu $\to$ MDF and MDF $\to$ Rabtakar with historical preservation in `PromotionHistoryModel` and unit transfers with historical lock in `UnitAssignmentHistoryModel`.
   - **Dynamic Activity Status Engine**: Real-time status calculator evaluating Madu, MDF, Rabtakar, Daeen, and participation activity against configurable sector thresholds in `WorkspaceSettingsModel`.
-  - **Frontend Views**:
-    - `UnitsPage`: Responsive unit cards, leadership indicators, Add Unit modal.
-    - `PeoplePage`: Category filter tabs (Madu, MDF, Rabtakar, Daeen), search by name/ID, unit filter, dynamic active/inactive status badges, Add Person modal, Promote modal, and Transfer Unit modal.
-    - `PersonProfilePage`: Comprehensive profile view with historical meetings table, promotion timeline, transfer timeline, and associated Madu list for Rabtakars.
-  - **Automated Integration Tests**: 12/12 passing integration tests in in-memory MongoDB across Auth, Workspaces, Units, People & Promotions, and the Dynamic Activity Engine.
-- **Next Milestone**: Sprint 4 — Individual Meeting Management (Rapid mobile meeting entry form with duplicate prevention, multi-Daeen attribution, meeting history, and live activity recalculation).
+  - **Individual Meetings**: Fast mobile meeting entry, auto-population of unit and mentor assignments, duplicate detection warning, audit logs, meeting history logs.
+  - **DMM Monthly Planning**: Monthly target entry, unit-wise conclusions, sector summaries, actual vs planned variance calculations, and expected MSC/MDF count.
+  - **RMM Weekly Planning**: Weekly planning sheets, next-week individual targets, expected day planning, and real-time weekly progress tracking.
+  - **Community Activities (DF & GM)**: Dialogue Forum and Group Meeting sessions with mentor directory, multi-category participant attendance checklists, and independent participation analytics.
+  - **Reporting & Exports**: Weekly Dawati Report matching United Pakistan standard, WhatsApp clipboard formatter, Word (.doc), Excel (.csv), Plain Text, and Print exports.
+  - **Analytics & Trends**: Recharts visual breakdown of completed meetings by unit and people activity status health.
+  - **Workspace Settings**: Threshold sliders (`maduDays`, `mdfDays`, `daeenDays`, `dfDays`, `gmDays`), spectator export permission toggle, spectator invite link generator, and access request approval queue.
+  - **Automated Integration Tests**: 18/18 passing integration tests across 7 test suites in in-memory MongoDB.
+  - **Frontend Client**: Full responsive React SPA with navigation suite (Navbar, Desktop Sidebar, Mobile Drawer, Mobile Bottom Navigation) and all feature pages.
+- **Next Milestone**: Sprint 9 — Production Readiness, Security Review, and Deployment Operational Guide.
 
 ## Core Architectural Decisions
 1. **Multi-Tenancy**: Every sector has an isolated workspace. All database queries for sector data strictly enforce `{ workspaceId }` scoping via middleware.
