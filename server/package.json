@@ -4,8 +4,8 @@
   "private": true,
   "scripts": {
     "dev": "tsx watch src/server.ts",
-    "build": "node -e \"require('child_process').execSync('npm run build --workspace=@dms/shared', {stdio: 'inherit'})\" && tsc",
-    "start": "node dist/server.js",
+    "build": "tsc",
+    "start": "node dist/server/src/server.js",
     "test": "vitest run",
     "test:watch": "vitest"
   },
