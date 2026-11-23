@@ -3,6 +3,7 @@ import cors from 'cors';
 import helmet from 'helmet';
 import rateLimit from 'express-rate-limit';
 import { ENV } from './config/env';
+import { connectDB } from './config/db';
 import { authRoutes } from './modules/auth/auth.routes';
 import { workspaceRoutes } from './modules/workspaces/workspace.routes';
 import { unitRoutes } from './modules/units/unit.routes';
@@ -19,6 +20,19 @@ import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
 
+// Trust reverse proxy (Vercel / Cloudflare edge)
+app.set('trust proxy', 1);
+
+// Ensure MongoDB is connected on each incoming serverless request
+app.use(async (_req, _res, next) => {
+  try {
+    await connectDB();
+    next();
+  } catch (error) {
+    next(error);
+  }
+});
+
 // Security middlewares
 app.use(helmet());
 app.use(
@@ -31,7 +45,7 @@ app.use(
 // General rate limiter
 const limiter = rateLimit({
   windowMs: 15 * 60 * 1000,
-  max: 200,
+  max: 300,
   message: { success: false, message: 'Too many requests, please try again later.' }
 });
 app.use('/api/', limiter);

@@ -2,33 +2,52 @@ import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import { ApiService } from '../services/api';
-import { auth, googleProvider, signInWithPopup, signInWithEmailAndPassword } from '../config/firebase';
-import { ShieldCheck, Lock, Mail, AlertCircle, LogIn } from 'lucide-react';
+import { auth, googleProvider, signInWithPopup } from '../config/firebase';
+import { ShieldCheck, Lock, Mail, AlertCircle, UserPlus, CheckCircle2 } from 'lucide-react';
 
 export const LoginPage: React.FC = () => {
   const navigate = useNavigate();
   const { login } = useAuth();
+  const [isRegister, setIsRegister] = useState(false);
+  const [name, setName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [successMsg, setSuccessMsg] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError(null);
+    setSuccessMsg(null);
     setLoading(true);
 
     try {
-      // Direct email/password auth endpoint
-      const result = await ApiService.post<{ token: string; user: any }>('/auth/login', {
-        email,
-        password
-      });
+      if (isRegister) {
+        const result = await ApiService.post<any>('/auth/register', {
+          name,
+          email,
+          password
+        });
 
-      login(result.token, result.user);
-      navigate('/');
+        if (result.pendingApproval) {
+          setSuccessMsg(result.message);
+          setIsRegister(false);
+        } else if (result.token) {
+          login(result.token, result.user);
+          navigate('/');
+        }
+      } else {
+        const result = await ApiService.post<{ token: string; user: any }>('/auth/login', {
+          email,
+          password
+        });
+
+        login(result.token, result.user);
+        navigate('/');
+      }
     } catch (err: any) {
-      setError(err.message || 'Login failed. Please verify credentials.');
+      setError(err.message || 'Authentication failed. Please verify credentials.');
     } finally {
       setLoading(false);
     }
@@ -36,12 +55,12 @@ export const LoginPage: React.FC = () => {
 
   const handleGoogleSignIn = async () => {
     setError(null);
+    setSuccessMsg(null);
     setLoading(true);
     try {
       const userCredential = await signInWithPopup(auth, googleProvider);
       const idToken = await userCredential.user.getIdToken();
 
-      // Exchange / authenticate Firebase ID token with backend
       const result = await ApiService.post<{ token: string; user: any }>('/auth/firebase-login', {
         idToken,
         email: userCredential.user.email,
@@ -56,11 +75,6 @@ export const LoginPage: React.FC = () => {
     } finally {
       setLoading(false);
     }
-  };
-
-  const fillDemo = (demoEmail: string, demoPass: string) => {
-    setEmail(demoEmail);
-    setPassword(demoPass);
   };
 
   return (
@@ -85,7 +99,30 @@ export const LoginPage: React.FC = () => {
           </div>
         )}
 
+        {successMsg && (
+          <div className="flex items-center gap-2 rounded-lg bg-emerald-50 p-3 text-xs text-emerald-800 border border-emerald-200">
+            <CheckCircle2 className="h-4 w-4 shrink-0 text-emerald-600" />
+            <span>{successMsg}</span>
+          </div>
+        )}
+
         <form className="space-y-4" onSubmit={handleSubmit}>
+          {isRegister && (
+            <div>
+              <label className="block text-xs font-semibold text-typography-main mb-1">
+                Full Name
+              </label>
+              <input
+                type="text"
+                required
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Secretary Name"
+                className="input-field text-xs"
+              />
+            </div>
+          )}
+
           <div>
             <label className="block text-xs font-semibold text-typography-main mb-1">
               Email Address
@@ -97,7 +134,7 @@ export const LoginPage: React.FC = () => {
                 required
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                placeholder="secretary@gulraiz.dms"
+                placeholder="user@unitedpakistan.pk"
                 className="input-field pl-9"
               />
             </div>
@@ -125,7 +162,11 @@ export const LoginPage: React.FC = () => {
             disabled={loading}
             className="btn-primary w-full py-2.5 mt-2"
           >
-            {loading ? 'Authenticating...' : 'Sign In with Email'}
+            {loading
+              ? 'Processing...'
+              : isRegister
+              ? 'Create Account'
+              : 'Sign In with Email'}
           </button>
 
           {/* Firebase Google Sign-In */}
@@ -166,27 +207,20 @@ export const LoginPage: React.FC = () => {
           </button>
         </form>
 
-        {/* Quick Demo Credentials */}
-        <div className="pt-4 border-t border-surface-border text-center">
-          <span className="text-[11px] font-semibold text-typography-muted uppercase tracking-wider block mb-2">
-            Demo Credentials
-          </span>
-          <div className="flex gap-2">
-            <button
-              type="button"
-              onClick={() => fillDemo('secretary.gulraiz@dms.pk', 'GulraizSec2026!')}
-              className="flex-1 rounded-md border border-surface-border bg-surface-secondary py-1.5 text-[11px] font-medium text-typography-main hover:bg-gray-100"
-            >
-              Secretary Dawat
-            </button>
-            <button
-              type="button"
-              onClick={() => fillDemo('viewer@dms.pk', 'Viewer2026!')}
-              className="flex-1 rounded-md border border-surface-border bg-surface-secondary py-1.5 text-[11px] font-medium text-typography-main hover:bg-gray-100"
-            >
-              Spectator
-            </button>
-          </div>
+        <div className="pt-3 border-t border-surface-border text-center">
+          <button
+            type="button"
+            onClick={() => {
+              setIsRegister(!isRegister);
+              setError(null);
+              setSuccessMsg(null);
+            }}
+            className="text-xs font-semibold text-brand-red hover:underline"
+          >
+            {isRegister
+              ? 'Already have an account? Sign In'
+              : 'New Secretary? Register an Account'}
+          </button>
         </div>
       </div>
     </div>

@@ -14,7 +14,7 @@ export interface IUser {
   email: string;
   name: string;
   systemRole: SystemRole;
-  status: 'ACTIVE' | 'SUSPENDED';
+  status: 'ACTIVE' | 'PENDING_APPROVAL' | 'SUSPENDED';
   createdAt: string;
 }
 

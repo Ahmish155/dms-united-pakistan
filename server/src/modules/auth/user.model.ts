@@ -6,7 +6,7 @@ export interface IUserDoc extends Document {
   passwordHash: string;
   name: string;
   systemRole: SystemRole;
-  status: 'ACTIVE' | 'SUSPENDED';
+  status: 'ACTIVE' | 'PENDING_APPROVAL' | 'SUSPENDED';
   createdAt: Date;
   updatedAt: Date;
 }
@@ -36,8 +36,8 @@ const UserSchema = new Schema<IUserDoc>(
     },
     status: {
       type: String,
-      enum: ['ACTIVE', 'SUSPENDED'],
-      default: 'ACTIVE'
+      enum: ['ACTIVE', 'PENDING_APPROVAL', 'SUSPENDED'],
+      default: 'PENDING_APPROVAL'
     }
   },
   { timestamps: true }

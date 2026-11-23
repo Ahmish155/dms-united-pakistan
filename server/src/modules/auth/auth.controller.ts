@@ -48,4 +48,40 @@ export class AuthController {
       data: req.user
     });
   }
+
+  static async getPendingUsers(_req: Request, res: Response, next: NextFunction) {
+    try {
+      const users = await AuthService.getPendingUsers();
+      return res.status(200).json({
+        success: true,
+        data: users
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async approveUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await AuthService.approveUser(req.params.id);
+      return res.status(200).json({
+        success: true,
+        data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async rejectUser(req: Request, res: Response, next: NextFunction) {
+    try {
+      const user = await AuthService.rejectUser(req.params.id);
+      return res.status(200).json({
+        success: true,
+        data: user
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

@@ -17,6 +17,7 @@ import { ActivitiesPage } from './pages/ActivitiesPage';
 import { ReportsPage } from './pages/ReportsPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SettingsPage } from './pages/SettingsPage';
+import { SuperAdminPage } from './pages/SuperAdminPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -59,6 +60,9 @@ export const App: React.FC = () => {
 
                 {/* Settings & Spectators */}
                 <Route path="settings" element={<SettingsPage />} />
+
+                {/* Super Admin Console */}
+                <Route path="admin" element={<SuperAdminPage />} />
               </Route>
 
               <Route path="*" element={<Navigate to="/" replace />} />
