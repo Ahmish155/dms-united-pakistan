@@ -5,6 +5,10 @@ import rateLimit from 'express-rate-limit';
 import { ENV } from './config/env';
 import { authRoutes } from './modules/auth/auth.routes';
 import { workspaceRoutes } from './modules/workspaces/workspace.routes';
+import { unitRoutes } from './modules/units/unit.routes';
+import { personRoutes } from './modules/people/person.routes';
+import { settingsRoutes } from './modules/settings/settings.routes';
+import { activityRoutes } from './modules/activity-engine/activity.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -38,6 +42,10 @@ app.get('/api/health', (_req, res) => {
 // Routes
 app.use('/api/v1/auth', authRoutes);
 app.use('/api/v1/workspaces', workspaceRoutes);
+app.use('/api/v1/units', unitRoutes);
+app.use('/api/v1/people', personRoutes);
+app.use('/api/v1/settings', settingsRoutes);
+app.use('/api/v1/activity', activityRoutes);
 
 // Error Handling
 app.use(errorHandler);

@@ -6,6 +6,9 @@ import { WorkspaceProvider } from './context/WorkspaceContext';
 import { AppLayout } from './layouts/AppLayout';
 import { LoginPage } from './pages/LoginPage';
 import { DashboardPage } from './pages/DashboardPage';
+import { UnitsPage } from './pages/UnitsPage';
+import { PeoplePage } from './pages/PeoplePage';
+import { PersonProfilePage } from './pages/PersonProfilePage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -16,7 +19,6 @@ const queryClient = new QueryClient({
   }
 });
 
-// Placeholder view for secondary routes while in foundation stage
 const ModulePlaceholder: React.FC<{ title: string }> = ({ title }) => (
   <div className="rounded-xl border border-surface-border bg-white p-6 shadow-sm">
     <h2 className="text-base font-bold text-typography-main">{title}</h2>
@@ -37,14 +39,15 @@ export const App: React.FC = () => {
 
               <Route path="/" element={<AppLayout />}>
                 <Route index element={<DashboardPage />} />
-                <Route path="people/*" element={<ModulePlaceholder title="People & Responsibilities Directory" />} />
+                <Route path="units" element={<UnitsPage />} />
+                <Route path="people" element={<PeoplePage />} />
+                <Route path="people/:id" element={<PersonProfilePage />} />
                 <Route path="meetings/*" element={<ModulePlaceholder title="Individual Meetings Management" />} />
                 <Route path="dmm/*" element={<ModulePlaceholder title="DMM Monthly Planning" />} />
                 <Route path="rmm/*" element={<ModulePlaceholder title="RMM Weekly Planning" />} />
                 <Route path="activities/*" element={<ModulePlaceholder title="Dialogue Forums & Group Meetings" />} />
                 <Route path="analytics/*" element={<ModulePlaceholder title="Analytics & Insights" />} />
                 <Route path="reports/*" element={<ModulePlaceholder title="Reporting & Multi-Format Exports" />} />
-                <Route path="units/*" element={<ModulePlaceholder title="Units Management" />} />
                 <Route path="settings/*" element={<ModulePlaceholder title="Workspace Settings & Spectators" />} />
               </Route>
 

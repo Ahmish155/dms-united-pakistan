@@ -22,12 +22,12 @@ export const registerUserSchema = z.object({
 
 export const createWorkspaceSchema = z.object({
   name: z.string().min(3),
-  code: z.string().min(2).max(10).toUpperCase()
+  code: z.string().min(2).max(20).toUpperCase()
 });
 
 export const createUnitSchema = z.object({
   name: z.string().min(2),
-  code: z.string().min(1).max(10).toUpperCase(),
+  code: z.string().min(1).max(20).toUpperCase(),
   presidentPersonId: z.string().optional(),
   generalSecretaryPersonId: z.string().optional()
 });
