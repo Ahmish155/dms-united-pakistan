@@ -1,0 +1,35 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply min-h-screen font-sans;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    @apply inline-flex items-center justify-center rounded-lg bg-brand-red px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:bg-brand-red-hover active:scale-[0.98] disabled:opacity-50 disabled:pointer-events-none;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center rounded-lg border border-surface-border bg-white px-4 py-2.5 text-sm font-medium text-typography-main shadow-sm transition-all hover:bg-surface-secondary active:scale-[0.98] disabled:opacity-50;
+  }
+
+  .input-field {
+    @apply block w-full rounded-lg border border-surface-border bg-white px-3.5 py-2.5 text-sm text-typography-main placeholder:text-typography-muted focus:border-brand-red focus:outline-none focus:ring-1 focus:ring-brand-red;
+  }
+
+  .badge-active {
+    @apply inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-0.5 text-xs font-medium text-status-success border border-emerald-200;
+  }
+
+  .badge-inactive {
+    @apply inline-flex items-center rounded-full bg-amber-50 px-2.5 py-0.5 text-xs font-medium text-status-warning border border-amber-200;
+  }
+
+  .badge-danger {
+    @apply inline-flex items-center rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-status-error border border-red-200;
+  }
+}
