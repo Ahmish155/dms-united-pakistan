@@ -47,6 +47,33 @@ export class DfController {
     }
   }
 
+  static async updateDialogueForum(req: Request, res: Response, next: NextFunction) {
+    try {
+      const df = await DfService.updateDialogueForum(
+        req.workspaceId!,
+        req.params.id,
+        req.body,
+        req.user!.id
+      );
+      return res.status(200).json({ success: true, data: df });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteDialogueForum(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await DfService.deleteDialogueForum(
+        req.workspaceId!,
+        req.params.id,
+        req.user!.id
+      );
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getDfAnalytics(req: Request, res: Response, next: NextFunction) {
     try {
       const analytics = await DfService.getDfAnalytics(req.workspaceId!);

@@ -12,6 +12,7 @@ router.post('/', PersonController.createPerson);
 router.get('/', PersonController.getPeople);
 router.get('/:id', PersonController.getPersonById);
 router.patch('/:id', PersonController.updatePerson);
+router.delete('/:id', PersonController.deletePerson);
 router.post('/:id/promote', PersonController.promotePerson);
 router.post('/:id/transfer', PersonController.transferPerson);
 

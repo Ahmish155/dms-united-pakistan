@@ -10,6 +10,7 @@ export interface IRmmDoc extends Document {
   plannedMaduMeetings: number;
   plannedMdfMeetings: number;
   comments?: string;
+  status: 'ACTIVE' | 'ENDED';
   createdById: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
@@ -53,6 +54,11 @@ const RmmSchema = new Schema<IRmmDoc>(
     },
     comments: {
       type: String
+    },
+    status: {
+      type: String,
+      enum: ['ACTIVE', 'ENDED'],
+      default: 'ACTIVE'
     },
     createdById: {
       type: Schema.Types.ObjectId,

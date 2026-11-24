@@ -29,7 +29,8 @@ export class PersonService {
     data: {
       fullName: string;
       contactNumber?: string;
-      currentUnitId: string;
+      currentUnitId?: string | null;
+      assignedUnitIds?: string[];
       currentStage: PersonStage;
       roles?: OrganizationalResponsibility[];
       primaryRabtakarId?: string;
@@ -38,13 +39,37 @@ export class PersonService {
     },
     userId: string
   ) {
-    const unit = await UnitModel.findOne({
-      _id: new Types.ObjectId(data.currentUnitId),
-      workspaceId: new Types.ObjectId(workspaceId),
-      isActive: true
-    });
-    if (!unit) {
-      throw new AppError('Specified Unit not found in this sector', 404);
+    const isDaeen = data.currentStage === PersonStage.DAEEN || data.roles?.includes(OrganizationalResponsibility.DAEEN);
+
+    let unitId: Types.ObjectId | undefined = undefined;
+    if (data.currentUnitId) {
+      const unit = await UnitModel.findOne({
+        _id: new Types.ObjectId(data.currentUnitId),
+        workspaceId: new Types.ObjectId(workspaceId),
+        isActive: true
+      });
+      if (unit) {
+        unitId = unit._id;
+      }
+    } else if (!isDaeen) {
+      // If not Daeen and no unit specified, try to find any active unit in sector
+      const firstUnit = await UnitModel.findOne({
+        workspaceId: new Types.ObjectId(workspaceId),
+        isActive: true
+      });
+      if (firstUnit) {
+        unitId = firstUnit._id;
+      }
+    }
+
+    const assignedUnits: Types.ObjectId[] = [];
+    if (data.assignedUnitIds && Array.isArray(data.assignedUnitIds)) {
+      for (const u of data.assignedUnitIds) {
+        if (Types.ObjectId.isValid(u)) assignedUnits.push(new Types.ObjectId(u));
+      }
+    }
+    if (unitId && !assignedUnits.some((id) => id.equals(unitId))) {
+      assignedUnits.push(unitId);
     }
 
     const internalId = await this.generateInternalId(workspaceId);
@@ -54,7 +79,8 @@ export class PersonService {
       internalId,
       fullName: data.fullName,
       contactNumber: data.contactNumber,
-      currentUnitId: new Types.ObjectId(data.currentUnitId),
+      currentUnitId: unitId,
+      assignedUnitIds: assignedUnits,
       currentStage: data.currentStage || PersonStage.MADU,
       roles: data.roles || [],
       primaryRabtakarId: data.primaryRabtakarId
@@ -226,6 +252,15 @@ export class PersonService {
 
     if (data.fullName) person.fullName = data.fullName;
     if (data.contactNumber !== undefined) person.contactNumber = data.contactNumber;
+    if (data.currentStage) person.currentStage = data.currentStage;
+    if (data.currentUnitId !== undefined) {
+      person.currentUnitId = data.currentUnitId ? new Types.ObjectId(data.currentUnitId) : undefined;
+    }
+    if (data.assignedUnitIds !== undefined && Array.isArray(data.assignedUnitIds)) {
+      person.assignedUnitIds = data.assignedUnitIds
+        .filter((id: string) => Types.ObjectId.isValid(id))
+        .map((id: string) => new Types.ObjectId(id));
+    }
     if (data.roles) person.roles = data.roles;
     if (data.primaryRabtakarId !== undefined) {
       person.primaryRabtakarId = data.primaryRabtakarId
@@ -252,6 +287,32 @@ export class PersonService {
     });
 
     return person;
+  }
+
+  static async deletePerson(workspaceId: string, id: string, userId: string) {
+    const person = await PersonModel.findOne({
+      _id: new Types.ObjectId(id),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+
+    if (!person) {
+      throw new AppError('Person not found', 404);
+    }
+
+    const previousState = person.toObject();
+    person.isArchived = true;
+    await person.save();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'PERSON_DELETED',
+      entityType: 'Person',
+      entityId: person._id,
+      previousState
+    });
+
+    return { message: 'Person deleted successfully' };
   }
 
   static async promotePerson(

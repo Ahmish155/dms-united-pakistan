@@ -13,5 +13,7 @@ router.get('/mentors', DfController.getMentors);
 router.post('/', DfController.recordDialogueForum);
 router.get('/', DfController.getDialogueForums);
 router.get('/analytics', DfController.getDfAnalytics);
+router.patch('/:id', DfController.updateDialogueForum);
+router.delete('/:id', DfController.deleteDialogueForum);
 
 export const dfRoutes = router;

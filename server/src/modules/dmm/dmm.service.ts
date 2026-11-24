@@ -29,15 +29,28 @@ export class DmmService {
     let dmm = await DmmModel.findOne({
       workspaceId: new Types.ObjectId(workspaceId),
       year: data.year,
-      month: data.month
+      month: data.month,
+      sessionStatus: 'ACTIVE'
     });
 
     if (!dmm) {
+      // End any existing ACTIVE DMM for same workspace/month/year before creating new one
+      await DmmModel.updateMany(
+        {
+          workspaceId: new Types.ObjectId(workspaceId),
+          year: data.year,
+          month: data.month,
+          sessionStatus: 'ACTIVE'
+        },
+        { $set: { sessionStatus: 'ENDED' } }
+      );
+
       dmm = await DmmModel.create({
         workspaceId: new Types.ObjectId(workspaceId),
         year: data.year,
         month: data.month,
         status: data.status || DmmStatus.DRAFT,
+        sessionStatus: 'ACTIVE',
         expectedMscCount: data.expectedMscCount || 0,
         expectedMdfCount: data.expectedMdfCount || 0,
         createdById: new Types.ObjectId(userId)

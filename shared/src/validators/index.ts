@@ -35,11 +35,24 @@ export const createUnitSchema = z.object({
 export const createPersonSchema = z.object({
   fullName: z.string().min(2),
   contactNumber: z.string().optional(),
-  currentUnitId: z.string(),
+  currentUnitId: z.string().optional().nullable(),
+  assignedUnitIds: z.array(z.string()).default([]),
   currentStage: z.nativeEnum(PersonStage),
   roles: z.array(z.nativeEnum(OrganizationalResponsibility)).default([]),
   primaryRabtakarId: z.string().optional(),
   defaultDaeenId: z.string().optional(),
+  notes: z.string().optional()
+});
+
+export const updatePersonSchema = z.object({
+  fullName: z.string().min(2).optional(),
+  contactNumber: z.string().optional(),
+  currentUnitId: z.string().optional().nullable(),
+  assignedUnitIds: z.array(z.string()).optional(),
+  currentStage: z.nativeEnum(PersonStage).optional(),
+  roles: z.array(z.nativeEnum(OrganizationalResponsibility)).optional(),
+  primaryRabtakarId: z.string().optional().nullable(),
+  defaultDaeenId: z.string().optional().nullable(),
   notes: z.string().optional()
 });
 

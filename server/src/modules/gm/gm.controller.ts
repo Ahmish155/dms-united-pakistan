@@ -29,6 +29,33 @@ export class GmController {
     }
   }
 
+  static async updateGroupMeeting(req: Request, res: Response, next: NextFunction) {
+    try {
+      const gm = await GmService.updateGroupMeeting(
+        req.workspaceId!,
+        req.params.id,
+        req.body,
+        req.user!.id
+      );
+      return res.status(200).json({ success: true, data: gm });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteGroupMeeting(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await GmService.deleteGroupMeeting(
+        req.workspaceId!,
+        req.params.id,
+        req.user!.id
+      );
+      return res.status(200).json({ success: true, data: result });
+    } catch (error) {
+      next(error);
+    }
+  }
+
   static async getGmAnalytics(req: Request, res: Response, next: NextFunction) {
     try {
       const analytics = await GmService.getGmAnalytics(req.workspaceId!);

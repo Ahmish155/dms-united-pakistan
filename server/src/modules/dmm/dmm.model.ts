@@ -7,6 +7,7 @@ export interface IDmmDoc extends Document {
   month: number;
   year: number;
   status: DmmStatus;
+  sessionStatus: 'ACTIVE' | 'ENDED';
   expectedMscCount: number;
   expectedMdfCount: number;
   createdById: Types.ObjectId;
@@ -37,6 +38,11 @@ const DmmSchema = new Schema<IDmmDoc>(
       enum: Object.values(DmmStatus),
       default: DmmStatus.DRAFT
     },
+    sessionStatus: {
+      type: String,
+      enum: ['ACTIVE', 'ENDED'],
+      default: 'ACTIVE'
+    },
     expectedMscCount: {
       type: Number,
       default: 0
@@ -54,7 +60,7 @@ const DmmSchema = new Schema<IDmmDoc>(
   { timestamps: true }
 );
 
-DmmSchema.index({ workspaceId: 1, year: 1, month: 1 }, { unique: true });
+DmmSchema.index({ workspaceId: 1, year: 1, month: 1, sessionStatus: 1 });
 
 export const DmmModel =
   mongoose.models.Dmm || mongoose.model<IDmmDoc>('Dmm', DmmSchema);

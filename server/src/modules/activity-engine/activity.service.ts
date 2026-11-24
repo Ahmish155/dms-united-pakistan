@@ -162,45 +162,97 @@ export class ActivityEngineService {
 
   static async getSectorActivityOverview(workspaceId: string) {
     const thresholds = await this.getWorkspaceThresholds(workspaceId);
+    const wId = new Types.ObjectId(workspaceId);
 
-    const people = await PersonModel.find({
-      workspaceId: new Types.ObjectId(workspaceId),
-      isArchived: false
-    });
+    const [people, meetings] = await Promise.all([
+      PersonModel.find({ workspaceId: wId, isArchived: false }).lean(),
+      IndividualMeetingModel.find({ workspaceId: wId }).sort({ meetingDate: -1 }).lean()
+    ]);
 
-    const maduList = people.filter((p) => p.currentStage === PersonStage.MADU);
-    const mdfList = people.filter((p) => p.currentStage === PersonStage.MDF);
+    // Build quick lookup for latest meeting per person
+    const latestMeetingPerPerson = new Map<string, Date>();
+    const daeenMeetings = new Map<string, Date>();
+
+    for (const m of meetings) {
+      const pId = m.personId.toString();
+      if (!latestMeetingPerPerson.has(pId)) {
+        latestMeetingPerPerson.set(pId, new Date(m.meetingDate));
+      }
+      if (m.primaryDaeenId) {
+        const dId = m.primaryDaeenId.toString();
+        if (!daeenMeetings.has(dId)) daeenMeetings.set(dId, new Date(m.meetingDate));
+      }
+      if (m.additionalDaeenIds && Array.isArray(m.additionalDaeenIds)) {
+        for (const addD of m.additionalDaeenIds) {
+          const addDId = addD.toString();
+          if (!daeenMeetings.has(addDId)) daeenMeetings.set(addDId, new Date(m.meetingDate));
+        }
+      }
+    }
+
+    const now = new Date();
+    const maduList = people.filter((p: any) => p.currentStage === PersonStage.MADU);
+    const mdfList = people.filter((p: any) => p.currentStage === PersonStage.MDF);
     const rabtakarList = people.filter(
-      (p) =>
+      (p: any) =>
         p.currentStage === PersonStage.RABTAKAR ||
-        p.roles.includes(OrganizationalResponsibility.RABTAKAR)
+        p.roles?.includes(OrganizationalResponsibility.RABTAKAR)
     );
-    const daeenList = people.filter((p) =>
-      p.roles.includes(OrganizationalResponsibility.DAEEN)
+    const daeenList = people.filter(
+      (p: any) =>
+        p.currentStage === PersonStage.DAEEN ||
+        p.roles?.includes(OrganizationalResponsibility.DAEEN)
     );
 
+    // Active Madu set
+    const activeMaduIds = new Set<string>();
     let activeMadu = 0;
     for (const m of maduList) {
-      const s = await this.calculatePersonActivity(workspaceId, m, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeMadu++;
+      const mDate = latestMeetingPerPerson.get((m._id as any).toString());
+      if (mDate) {
+        const diffDays = Math.floor(Math.abs(now.getTime() - mDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= thresholds.maduDays) {
+          activeMadu++;
+          activeMaduIds.add((m._id as any).toString());
+        }
+      }
     }
 
+    // Active MDF
     let activeMdf = 0;
     for (const m of mdfList) {
-      const s = await this.calculatePersonActivity(workspaceId, m, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeMdf++;
+      const mDate = latestMeetingPerPerson.get((m._id as any).toString());
+      if (mDate) {
+        const diffDays = Math.floor(Math.abs(now.getTime() - mDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= thresholds.mdfDays) {
+          activeMdf++;
+        }
+      }
     }
 
+    // Active Rabtakar: at least ONE assigned Madu is active
     let activeRabtakar = 0;
     for (const r of rabtakarList) {
-      const s = await this.calculatePersonActivity(workspaceId, r, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeRabtakar++;
+      const rId = (r._id as any).toString();
+      const hasActiveMadu = maduList.some(
+        (m: any) => m.primaryRabtakarId?.toString() === rId && activeMaduIds.has((m._id as any).toString())
+      );
+      if (hasActiveMadu) {
+        activeRabtakar++;
+      }
     }
 
+    // Active Daeen: conducted a meeting within daeenDays
     let activeDaeen = 0;
     for (const d of daeenList) {
-      const s = await this.calculatePersonActivity(workspaceId, d, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeDaeen++;
+      const dId = (d._id as any).toString();
+      const dDate = daeenMeetings.get(dId);
+      if (dDate) {
+        const diffDays = Math.floor(Math.abs(now.getTime() - dDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= thresholds.daeenDays) {
+          activeDaeen++;
+        }
+      }
     }
 
     return {
@@ -292,31 +344,75 @@ export class ActivityEngineService {
         p.roles?.includes(OrganizationalResponsibility.RABTAKAR)
     );
     const daeenList: any[] = people.filter((p: any) =>
+      p.currentStage === PersonStage.DAEEN ||
       p.roles?.includes(OrganizationalResponsibility.DAEEN)
     );
 
+    // Map latest meetings for all meetings in workspace
+    const latestMeetingPerPerson = new Map<string, Date>();
+    const daeenMeetings = new Map<string, Date>();
+    for (const m of meetings) {
+      const pId = m.personId.toString();
+      if (!latestMeetingPerPerson.has(pId)) {
+        latestMeetingPerPerson.set(pId, new Date(m.meetingDate));
+      }
+      if (m.primaryDaeenId) {
+        const dId = m.primaryDaeenId.toString();
+        if (!daeenMeetings.has(dId)) daeenMeetings.set(dId, new Date(m.meetingDate));
+      }
+      if (m.additionalDaeenIds && Array.isArray(m.additionalDaeenIds)) {
+        for (const addD of m.additionalDaeenIds) {
+          const addDId = addD.toString();
+          if (!daeenMeetings.has(addDId)) daeenMeetings.set(addDId, new Date(m.meetingDate));
+        }
+      }
+    }
+
+    const activeMaduIds = new Set<string>();
     let activeMadu = 0;
     for (const m of maduList) {
-      const s = await this.calculatePersonActivity(workspaceId, m as any, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeMadu++;
+      const mDate = latestMeetingPerPerson.get((m._id as any).toString());
+      if (mDate) {
+        const diffDays = Math.floor(Math.abs(now.getTime() - mDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= thresholds.maduDays) {
+          activeMadu++;
+          activeMaduIds.add((m._id as any).toString());
+        }
+      }
     }
 
     let activeMdf = 0;
     for (const m of mdfList) {
-      const s = await this.calculatePersonActivity(workspaceId, m as any, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeMdf++;
+      const mDate = latestMeetingPerPerson.get((m._id as any).toString());
+      if (mDate) {
+        const diffDays = Math.floor(Math.abs(now.getTime() - mDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= thresholds.mdfDays) {
+          activeMdf++;
+        }
+      }
     }
 
     let activeRabtakar = 0;
     for (const r of rabtakarList) {
-      const s = await this.calculatePersonActivity(workspaceId, r as any, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeRabtakar++;
+      const rId = (r._id as any).toString();
+      const hasActiveMadu = maduList.some(
+        (m: any) => m.primaryRabtakarId?.toString() === rId && activeMaduIds.has((m._id as any).toString())
+      );
+      if (hasActiveMadu) {
+        activeRabtakar++;
+      }
     }
 
     let activeDaeen = 0;
     for (const d of daeenList) {
-      const s = await this.calculatePersonActivity(workspaceId, d as any, thresholds);
-      if (s.status === ActivityStatus.ACTIVE) activeDaeen++;
+      const dId = (d._id as any).toString();
+      const dDate = daeenMeetings.get(dId);
+      if (dDate) {
+        const diffDays = Math.floor(Math.abs(now.getTime() - dDate.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays <= thresholds.daeenDays) {
+          activeDaeen++;
+        }
+      }
     }
 
     // Sector Expected Meetings:
@@ -375,20 +471,25 @@ export class ActivityEngineService {
 
       let unitActiveMadu = 0;
       for (const m of unitMadu) {
-        const s = await this.calculatePersonActivity(workspaceId, m as any, thresholds);
-        if (s.status === ActivityStatus.ACTIVE) unitActiveMadu++;
+        if (activeMaduIds.has((m._id as any).toString())) unitActiveMadu++;
       }
 
       let unitActiveMdf = 0;
       for (const m of unitMdf) {
-        const s = await this.calculatePersonActivity(workspaceId, m as any, thresholds);
-        if (s.status === ActivityStatus.ACTIVE) unitActiveMdf++;
+        const mDate = latestMeetingPerPerson.get((m._id as any).toString());
+        if (mDate) {
+          const diffDays = Math.floor(Math.abs(now.getTime() - mDate.getTime()) / (1000 * 60 * 60 * 24));
+          if (diffDays <= thresholds.mdfDays) unitActiveMdf++;
+        }
       }
 
       let unitActiveRabtakar = 0;
       for (const r of unitRabtakar) {
-        const s = await this.calculatePersonActivity(workspaceId, r as any, thresholds);
-        if (s.status === ActivityStatus.ACTIVE) unitActiveRabtakar++;
+        const rId = (r._id as any).toString();
+        const hasActiveMaduInUnit = unitMadu.some(
+          (m: any) => m.primaryRabtakarId?.toString() === rId && activeMaduIds.has((m._id as any).toString())
+        );
+        if (hasActiveMaduInUnit) unitActiveRabtakar++;
       }
 
       // Expected meetings for this unit

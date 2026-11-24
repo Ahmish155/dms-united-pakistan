@@ -10,7 +10,9 @@ import {
   CheckCircle2,
   Award,
   Shield,
-  Clock
+  Clock,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import { ParticipantCategory, WorkspaceRole } from '@dms/shared';
 
@@ -49,6 +51,10 @@ export const ActivitiesPage: React.FC = () => {
   // Add Mentor Form
   const [mentorName, setMentorName] = useState('');
   const [mentorSpecialization, setMentorSpecialization] = useState('');
+
+  // Delete state
+  const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'DF' | 'GM'; label: string } | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   const fetchData = async () => {
     try {
@@ -178,6 +184,21 @@ export const ActivitiesPage: React.FC = () => {
   };
 
   const isSecretary = activeRole === WorkspaceRole.SECTOR_SECRETARY;
+
+  const handleDeleteActivity = async () => {
+    if (!deleteTarget) return;
+    try {
+      setDeleting(true);
+      const endpoint = deleteTarget.type === 'DF' ? `/df/${deleteTarget.id}` : `/gm/${deleteTarget.id}`;
+      await ApiService.delete(endpoint);
+      setDeleteTarget(null);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete');
+    } finally {
+      setDeleting(false);
+    }
+  };
 
   return (
     <div className="space-y-6">
@@ -325,6 +346,18 @@ export const ActivitiesPage: React.FC = () => {
                     </div>
                   </div>
                 )}
+
+                {/* Delete Button */}
+                {isSecretary && (
+                  <div className="pt-2 border-t border-surface-border flex justify-end">
+                    <button
+                      onClick={() => setDeleteTarget({ id: df._id, type: 'DF', label: df.topic || 'Dialogue Forum' })}
+                      className="text-[10px] text-status-error hover:bg-red-50 rounded px-2 py-1 flex items-center gap-1 transition-colors"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
+                  </div>
+                )}
               </div>
             ))}
           </div>
@@ -385,6 +418,18 @@ export const ActivitiesPage: React.FC = () => {
                         </span>
                       ))}
                     </div>
+                  </div>
+                )}
+
+                {/* Delete Button */}
+                {isSecretary && (
+                  <div className="pt-2 border-t border-surface-border flex justify-end">
+                    <button
+                      onClick={() => setDeleteTarget({ id: gm._id, type: 'GM', label: gm.topic || 'Group Meeting' })}
+                      className="text-[10px] text-status-error hover:bg-red-50 rounded px-2 py-1 flex items-center gap-1 transition-colors"
+                    >
+                      <Trash2 className="h-3 w-3" /> Delete
+                    </button>
                   </div>
                 )}
               </div>
@@ -689,6 +734,40 @@ export const ActivitiesPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="rounded-xl bg-white shadow-xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-red-100 p-2">
+                <AlertTriangle className="h-5 w-5 text-status-error" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-typography-main">
+                  Delete {deleteTarget.type === 'DF' ? 'Dialogue Forum' : 'Group Meeting'}
+                </h3>
+                <p className="text-xs text-typography-secondary">This cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-xs text-typography-main">
+              Delete <strong>"{deleteTarget.label}"</strong>? All attendance records will also be removed.
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteTarget(null)} className="btn-secondary text-xs py-1.5 px-3" disabled={deleting}>
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteActivity}
+                disabled={deleting}
+                className="text-xs py-1.5 px-4 rounded-lg bg-status-error text-white hover:opacity-90 font-semibold transition-opacity"
+              >
+                {deleting ? 'Deleting…' : 'Yes, Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}

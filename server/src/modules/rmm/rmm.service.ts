@@ -28,6 +28,20 @@ export class RmmService {
     const plannedMadu = data.plannedMaduMeetings || 0;
     const plannedMdf = data.plannedMdfMeetings || 0;
 
+    // End any existing ACTIVE RMM for the same unit that overlaps this week
+    const weekStart = new Date(data.weekStartDate);
+    const weekEnd = new Date(data.weekEndDate);
+    await RmmModel.updateMany(
+      {
+        workspaceId: new Types.ObjectId(workspaceId),
+        unitId: new Types.ObjectId(data.unitId),
+        status: 'ACTIVE',
+        weekStartDate: { $lte: weekEnd },
+        weekEndDate: { $gte: weekStart }
+      },
+      { $set: { status: 'ENDED' } }
+    );
+
     const rmm = await RmmModel.create({
       workspaceId: new Types.ObjectId(workspaceId),
       unitId: new Types.ObjectId(data.unitId),

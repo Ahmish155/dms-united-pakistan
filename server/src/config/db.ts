@@ -1,29 +1,39 @@
 import mongoose from 'mongoose';
 import { ENV } from './env';
 
-let isConnected = false;
+// Cache connection promise globally across serverless function invocations
+let cachedPromise: Promise<typeof mongoose> | null = null;
 
 export const connectDB = async (uri?: string): Promise<typeof mongoose> => {
-  if (isConnected && mongoose.connection.readyState === 1) {
+  if (mongoose.connection.readyState === 1) {
     return mongoose;
   }
 
-  const connectionUri = uri || ENV.MONGO_URI;
-  try {
-    const conn = await mongoose.connect(connectionUri, {
-      serverSelectionTimeoutMS: 8000,
-      connectTimeoutMS: 10000
+  if (!cachedPromise) {
+    const connectionUri = uri || ENV.MONGO_URI;
+    cachedPromise = mongoose.connect(connectionUri, {
+      serverSelectionTimeoutMS: 5000,
+      connectTimeoutMS: 5000,
+      maxPoolSize: 10,
+      minPoolSize: 1,
+      socketTimeoutMS: 30000,
+      bufferCommands: false
+    }).then((conn) => {
+      console.log(`[Database] MongoDB connected: ${conn.connection.host}`);
+      return conn;
+    }).catch((err) => {
+      cachedPromise = null;
+      console.error('[Database] Connection failed:', err);
+      throw err;
     });
-    isConnected = conn.connections[0].readyState === 1;
-    console.log(`[Database] MongoDB connected: ${conn.connection.host}`);
-    return conn;
-  } catch (error) {
-    console.error('[Database] Connection failed:', error);
-    throw error;
   }
+
+  return cachedPromise;
 };
 
 export const disconnectDB = async (): Promise<void> => {
-  await mongoose.disconnect();
-  isConnected = false;
+  if (cachedPromise) {
+    await mongoose.disconnect();
+    cachedPromise = null;
+  }
 };

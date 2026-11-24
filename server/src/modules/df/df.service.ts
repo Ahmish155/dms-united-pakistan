@@ -129,6 +129,67 @@ export class DfService {
     return results;
   }
 
+  static async updateDialogueForum(
+    workspaceId: string,
+    dfId: string,
+    data: {
+      date?: string;
+      mentorId?: string;
+      topic?: string;
+      comments?: string;
+    },
+    userId: string
+  ) {
+    const df = await DialogueForumModel.findOne({
+      _id: new Types.ObjectId(dfId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!df) throw new AppError('Dialogue Forum not found', 404);
+
+    if (data.date) df.date = new Date(data.date);
+    if (data.mentorId) df.mentorId = new Types.ObjectId(data.mentorId);
+    if (data.topic !== undefined) (df as any).topic = data.topic;
+    if (data.comments !== undefined) (df as any).comments = data.comments;
+    await df.save();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'DF_UPDATED',
+      entityType: 'DialogueForum',
+      entityId: df._id,
+      newState: data
+    });
+
+    return df;
+  }
+
+  static async deleteDialogueForum(
+    workspaceId: string,
+    dfId: string,
+    userId: string
+  ) {
+    const df = await DialogueForumModel.findOne({
+      _id: new Types.ObjectId(dfId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!df) throw new AppError('Dialogue Forum not found', 404);
+
+    await DfAttendanceModel.deleteMany({ dfId: df._id });
+    await df.deleteOne();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'DF_DELETED',
+      entityType: 'DialogueForum',
+      entityId: df._id,
+      newState: {}
+    });
+
+    return { deleted: true };
+  }
+
   static async getDfAnalytics(workspaceId: string) {
     const settings = (await WorkspaceSettingsModel.findOne({
       workspaceId: new Types.ObjectId(workspaceId)

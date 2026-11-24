@@ -77,7 +77,8 @@ export interface IPerson {
   internalId: string;
   fullName: string;
   contactNumber?: string;
-  currentUnitId: string;
+  currentUnitId?: string | null;
+  assignedUnitIds?: string[];
   currentStage: PersonStage;
   roles: OrganizationalResponsibility[];
   primaryRabtakarId?: string;

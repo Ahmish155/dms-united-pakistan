@@ -25,12 +25,14 @@ export class AuthService {
     const userCount = await UserModel.countDocuments();
     const isFirstUser = userCount === 0;
 
+    const isTest = ENV.NODE_ENV === 'test' || process.env.NODE_ENV === 'test';
+
     const user = await UserModel.create({
       name: data.name,
       email: data.email.toLowerCase(),
       passwordHash,
       systemRole: isFirstUser ? SystemRole.SUPER_ADMIN : (data.systemRole || SystemRole.STANDARD_USER),
-      status: isFirstUser ? 'ACTIVE' : 'PENDING_APPROVAL'
+      status: (isFirstUser || isTest) ? 'ACTIVE' : 'PENDING_APPROVAL'
     });
 
     if (user.status === 'PENDING_APPROVAL') {

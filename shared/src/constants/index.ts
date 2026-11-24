@@ -19,6 +19,7 @@ export enum PersonStage {
   MADU = 'MADU',
   MDF = 'MDF',
   RABTAKAR = 'RABTAKAR',
+  DAEEN = 'DAEEN',
   OTHER = 'OTHER'
 }
 

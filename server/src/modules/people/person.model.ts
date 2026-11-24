@@ -6,7 +6,8 @@ export interface IPersonDoc extends Document {
   internalId: string;
   fullName: string;
   contactNumber?: string;
-  currentUnitId: Types.ObjectId;
+  currentUnitId?: Types.ObjectId;
+  assignedUnitIds?: Types.ObjectId[];
   currentStage: PersonStage;
   roles: OrganizationalResponsibility[];
   primaryRabtakarId?: Types.ObjectId;
@@ -42,9 +43,15 @@ const PersonSchema = new Schema<IPersonDoc>(
     currentUnitId: {
       type: Schema.Types.ObjectId,
       ref: 'Unit',
-      required: true,
+      required: false,
       index: true
     },
+    assignedUnitIds: [
+      {
+        type: Schema.Types.ObjectId,
+        ref: 'Unit'
+      }
+    ],
     currentStage: {
       type: String,
       enum: Object.values(PersonStage),

@@ -114,4 +114,20 @@ export class PersonController {
       next(error);
     }
   }
+
+  static async deletePerson(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await PersonService.deletePerson(
+        req.workspaceId!,
+        req.params.id,
+        req.user!.id
+      );
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

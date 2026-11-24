@@ -95,6 +95,70 @@ export class GmService {
     return results;
   }
 
+  static async updateGroupMeeting(
+    workspaceId: string,
+    gmId: string,
+    data: {
+      date?: string;
+      facilitatorPersonId?: string;
+      topic?: string;
+      comments?: string;
+    },
+    userId: string
+  ) {
+    const gm = await GroupMeetingModel.findOne({
+      _id: new Types.ObjectId(gmId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!gm) throw new AppError('Group Meeting not found', 404);
+
+    if (data.date) gm.date = new Date(data.date);
+    if (data.facilitatorPersonId !== undefined)
+      (gm as any).facilitatorPersonId = data.facilitatorPersonId
+        ? new Types.ObjectId(data.facilitatorPersonId)
+        : undefined;
+    if (data.topic !== undefined) (gm as any).topic = data.topic;
+    if (data.comments !== undefined) (gm as any).comments = data.comments;
+    await gm.save();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'GM_UPDATED',
+      entityType: 'GroupMeeting',
+      entityId: gm._id,
+      newState: data
+    });
+
+    return gm;
+  }
+
+  static async deleteGroupMeeting(
+    workspaceId: string,
+    gmId: string,
+    userId: string
+  ) {
+    const gm = await GroupMeetingModel.findOne({
+      _id: new Types.ObjectId(gmId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!gm) throw new AppError('Group Meeting not found', 404);
+
+    await GmAttendanceModel.deleteMany({ gmId: gm._id });
+    await gm.deleteOne();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'GM_DELETED',
+      entityType: 'GroupMeeting',
+      entityId: gm._id,
+      newState: {}
+    });
+
+    return { deleted: true };
+  }
+
   static async getGmAnalytics(workspaceId: string) {
     const settings = (await WorkspaceSettingsModel.findOne({
       workspaceId: new Types.ObjectId(workspaceId)

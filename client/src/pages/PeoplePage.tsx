@@ -6,14 +6,11 @@ import {
   Users,
   Plus,
   Search,
-  Filter,
   UserCheck,
   UserX,
-  ArrowRight,
-  TrendingUp,
-  MapPin,
-  Shield,
-  ChevronRight
+  ChevronRight,
+  Trash2,
+  AlertTriangle
 } from 'lucide-react';
 import {
   PersonStage,
@@ -38,12 +35,17 @@ export const PeoplePage: React.FC = () => {
   const [fullName, setFullName] = useState('');
   const [contactNumber, setContactNumber] = useState('');
   const [unitId, setUnitId] = useState('');
+  const [assignedUnitIds, setAssignedUnitIds] = useState<string[]>([]);
   const [stage, setStage] = useState<PersonStage>(PersonStage.MADU);
   const [roles, setRoles] = useState<OrganizationalResponsibility[]>([]);
   const [primaryRabtakarId, setPrimaryRabtakarId] = useState('');
   const [defaultDaeenId, setDefaultDaeenId] = useState('');
   const [notes, setNotes] = useState('');
   const [submitting, setSubmitting] = useState(false);
+
+  // Delete Person
+  const [deletePersonTarget, setDeletePersonTarget] = useState<any | null>(null);
+  const [deleting, setDeleting] = useState(false);
 
   // Promote Modal
   const [promoteModalOpen, setPromoteModalOpen] = useState(false);
@@ -88,7 +90,8 @@ export const PeoplePage: React.FC = () => {
       await ApiService.post('/people', {
         fullName,
         contactNumber: contactNumber || undefined,
-        currentUnitId: unitId,
+        currentUnitId: stage !== PersonStage.DAEEN ? (unitId || undefined) : undefined,
+        assignedUnitIds: stage === PersonStage.RABTAKAR ? assignedUnitIds : undefined,
         currentStage: stage,
         roles,
         primaryRabtakarId: primaryRabtakarId || undefined,
@@ -100,6 +103,7 @@ export const PeoplePage: React.FC = () => {
       setContactNumber('');
       setNotes('');
       setRoles([]);
+      setAssignedUnitIds([]);
       setAddModalOpen(false);
       await fetchData();
     } catch (err: any) {
@@ -151,6 +155,20 @@ export const PeoplePage: React.FC = () => {
 
   const isSecretary = activeRole === WorkspaceRole.SECTOR_SECRETARY;
 
+  const handleDeletePerson = async () => {
+    if (!deletePersonTarget) return;
+    try {
+      setDeleting(true);
+      await ApiService.delete(`/people/${deletePersonTarget._id}`);
+      setDeletePersonTarget(null);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete person');
+    } finally {
+      setDeleting(false);
+    }
+  };
+
   // Filtered People
   const filteredPeople = people.filter((p) => {
     if (selectedUnitId && p.currentUnitId?._id !== selectedUnitId) {
@@ -161,7 +179,7 @@ export const PeoplePage: React.FC = () => {
     }
     if (activeTab === 'ALL') return true;
     if (activeTab === 'DAEEN') {
-      return p.roles?.includes(OrganizationalResponsibility.DAEEN);
+      return p.currentStage === PersonStage.DAEEN || p.roles?.includes(OrganizationalResponsibility.DAEEN);
     }
     return p.currentStage === activeTab;
   });
@@ -403,6 +421,15 @@ export const PeoplePage: React.FC = () => {
                     >
                       Transfer Unit
                     </button>
+
+                    {/* Delete */}
+                    <button
+                      onClick={() => setDeletePersonTarget(person)}
+                      className="rounded px-2 py-1 text-[11px] font-medium text-status-error hover:bg-red-50 transition-colors"
+                    >
+                      <Trash2 className="h-3 w-3 inline mr-0.5" />
+                      Delete
+                    </button>
                   </div>
                 )}
               </div>
@@ -465,9 +492,34 @@ export const PeoplePage: React.FC = () => {
                   <option value={PersonStage.MADU}>Madu (New contact)</option>
                   <option value={PersonStage.MDF}>MDF (Promoted contact)</option>
                   <option value={PersonStage.RABTAKAR}>Rabtakar (Active member)</option>
+                  <option value={PersonStage.DAEEN}>Daeen (Sector Resource — no unit)</option>
                   <option value={PersonStage.OTHER}>Other</option>
                 </select>
               </div>
+
+              {/* Rabtakar multi-unit assignment */}
+              {stage === PersonStage.RABTAKAR && (
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">
+                    Assigned Units (Rabtakar can serve multiple)
+                  </label>
+                  <div className="flex flex-wrap gap-2">
+                    {units.map((u) => (
+                      <label key={u._id} className="flex items-center gap-1.5 text-xs cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={assignedUnitIds.includes(u._id)}
+                          onChange={() => setAssignedUnitIds(prev =>
+                            prev.includes(u._id) ? prev.filter(x => x !== u._id) : [...prev, u._id]
+                          )}
+                          className="rounded"
+                        />
+                        <span>{u.name}</span>
+                      </label>
+                    ))}
+                  </div>
+                </div>
+              )}
 
               {/* Responsibilities */}
               <div>
@@ -689,6 +741,42 @@ export const PeoplePage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deletePersonTarget && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="rounded-xl bg-white shadow-xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-red-100 p-2">
+                <AlertTriangle className="h-5 w-5 text-status-error" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-typography-main">Delete Person</h3>
+                <p className="text-xs text-typography-secondary">This will archive the record permanently.</p>
+              </div>
+            </div>
+            <p className="text-xs text-typography-main">
+              Are you sure you want to delete <strong>{deletePersonTarget.fullName}</strong>?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button
+                onClick={() => setDeletePersonTarget(null)}
+                className="btn-secondary text-xs py-1.5 px-3"
+                disabled={deleting}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleDeletePerson}
+                disabled={deleting}
+                className="text-xs py-1.5 px-4 rounded-lg bg-status-error text-white hover:opacity-90 font-semibold transition-opacity"
+              >
+                {deleting ? 'Deleting…' : 'Yes, Delete'}
+              </button>
+            </div>
           </div>
         </div>
       )}
