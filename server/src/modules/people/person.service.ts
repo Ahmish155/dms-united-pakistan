@@ -187,21 +187,56 @@ export class PersonService {
       }
     }
 
-    // Map active Madu by Rabtakar
-    const maduList = people.filter((p: any) => p.currentStage === PersonStage.MADU);
-    const rabtakarMaduStats = new Map<string, { total: number; active: number }>();
-
-    for (const m of maduList) {
-      const rId = m.primaryRabtakarId?._id?.toString() || m.primaryRabtakarId?.toString();
-      if (rId) {
-        const stats = rabtakarMaduStats.get(rId) || { total: 0, active: 0 };
-        stats.total++;
-        const meet = latestMeetingPerPerson.get((m as any)._id.toString());
-        if (meet && meet.days <= thresholds.maduDays) {
-          stats.active++;
+    // Map active Madu and MDF by Rabtakar
+    const rabtakarProvidedStats = new Map<string, { madu: number; mdf: number; total: number; active: number }>();
+    for (const contact of people) {
+      if (contact.currentStage === PersonStage.MADU || contact.currentStage === PersonStage.MDF) {
+        const rId = contact.primaryRabtakarId?._id?.toString() || contact.primaryRabtakarId?.toString();
+        if (rId) {
+          const stats = rabtakarProvidedStats.get(rId) || { madu: 0, mdf: 0, total: 0, active: 0 };
+          if (contact.currentStage === PersonStage.MADU) stats.madu++;
+          if (contact.currentStage === PersonStage.MDF) stats.mdf++;
+          stats.total++;
+          const meet = latestMeetingPerPerson.get((contact as any)._id.toString());
+          const thresh = contact.currentStage === PersonStage.MADU ? thresholds.maduDays : thresholds.mdfDays;
+          if (meet && meet.days <= thresh) {
+            stats.active++;
+          }
+          rabtakarProvidedStats.set(rId, stats);
         }
-        rabtakarMaduStats.set(rId, stats);
       }
+    }
+
+    // Map associated Madu and MDF for each Daeen (both default assignments & meetings conducted)
+    const daeenAssociatedMap = new Map<string, Set<string>>();
+    for (const m of allMeetings) {
+      const pId = m.personId ? m.personId.toString() : '';
+      if (!pId) continue;
+      if (m.primaryDaeenId) {
+        const dId = m.primaryDaeenId.toString();
+        if (!daeenAssociatedMap.has(dId)) daeenAssociatedMap.set(dId, new Set());
+        daeenAssociatedMap.get(dId)!.add(pId);
+      }
+      if (m.additionalDaeenIds && Array.isArray(m.additionalDaeenIds)) {
+        for (const addD of m.additionalDaeenIds) {
+          const addDId = addD.toString();
+          if (!daeenAssociatedMap.has(addDId)) daeenAssociatedMap.set(addDId, new Set());
+          daeenAssociatedMap.get(addDId)!.add(pId);
+        }
+      }
+    }
+
+    for (const contact of people) {
+      const dId = contact.defaultDaeenId?._id?.toString() || contact.defaultDaeenId?.toString();
+      if (dId) {
+        if (!daeenAssociatedMap.has(dId)) daeenAssociatedMap.set(dId, new Set());
+        daeenAssociatedMap.get(dId)!.add((contact as any)._id.toString());
+      }
+    }
+
+    const personStageMap = new Map<string, PersonStage>();
+    for (const p of people) {
+      personStageMap.set((p as any)._id.toString(), p.currentStage);
     }
 
     // Decorate people in memory in < 1ms
@@ -213,6 +248,13 @@ export class PersonService {
       let activeAssociatedMaduCount = 0;
       let totalAssociatedMaduCount = 0;
       let totalMeetingsConducted = 0;
+      let rabtakarProvidedMaduCount = 0;
+      let rabtakarProvidedMdfCount = 0;
+      let rabtakarTotalProvidedCount = 0;
+      let daeenAssociatedMaduCount = 0;
+      let daeenAssociatedMdfCount = 0;
+      let daeenTotalAssociatedCount = 0;
+      let associatedPersonIds: string[] = [];
 
       // Check operational status override
       if (p.operationalStatus === OperationalStatus.FREEZED) {
@@ -239,9 +281,12 @@ export class PersonService {
         p.currentStage === PersonStage.RABTAKAR ||
         p.roles?.includes(OrganizationalResponsibility.RABTAKAR)
       ) {
-        const rStats = rabtakarMaduStats.get(pId) || { total: 0, active: 0 };
+        const rStats = rabtakarProvidedStats.get(pId) || { madu: 0, mdf: 0, total: 0, active: 0 };
         totalAssociatedMaduCount = rStats.total;
         activeAssociatedMaduCount = rStats.active;
+        rabtakarProvidedMaduCount = rStats.madu;
+        rabtakarProvidedMdfCount = rStats.mdf;
+        rabtakarTotalProvidedCount = rStats.total;
         totalMeetingsConducted = rabtakarMeetingCount.get(pId) || 0;
         if (activeAssociatedMaduCount > 0) activityStatus = ActivityStatus.ACTIVE;
       } else if (
@@ -256,6 +301,14 @@ export class PersonService {
           daysSinceLastMeeting = days;
           if (days <= thresholds.daeenDays) activityStatus = ActivityStatus.ACTIVE;
         }
+
+        associatedPersonIds = Array.from(daeenAssociatedMap.get(pId) || []);
+        for (const targetId of associatedPersonIds) {
+          const stage = personStageMap.get(targetId);
+          if (stage === PersonStage.MADU) daeenAssociatedMaduCount++;
+          else if (stage === PersonStage.MDF) daeenAssociatedMdfCount++;
+        }
+        daeenTotalAssociatedCount = daeenAssociatedMaduCount + daeenAssociatedMdfCount;
       }
 
       return {
@@ -265,7 +318,14 @@ export class PersonService {
         lastMeetingDate,
         activeAssociatedMaduCount,
         totalAssociatedMaduCount,
-        totalMeetingsConducted
+        totalMeetingsConducted,
+        rabtakarProvidedMaduCount,
+        rabtakarProvidedMdfCount,
+        rabtakarTotalProvidedCount,
+        daeenAssociatedMaduCount,
+        daeenAssociatedMdfCount,
+        daeenTotalAssociatedCount,
+        associatedPersonIds
       };
     });
 
@@ -387,10 +447,13 @@ export class PersonService {
       person.currentStage === PersonStage.DAEEN ||
       person.roles.includes(OrganizationalResponsibility.DAEEN)
     ) {
-      // Find Madu where defaultDaeenId is this person
+      const meetingPersonIds = meetingsAsDaeen.map((m: any) => m.personId?._id || m.personId).filter(Boolean);
       daeenAssociatedMadu = await PersonModel.find({
         workspaceId: new Types.ObjectId(workspaceId),
-        defaultDaeenId: person._id,
+        $or: [
+          { defaultDaeenId: person._id },
+          { _id: { $in: meetingPersonIds } }
+        ],
         isArchived: false
       })
         .populate('currentUnitId', 'name')

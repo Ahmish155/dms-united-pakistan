@@ -8,9 +8,14 @@ const router = Router();
 router.use(requireAuth);
 router.use(requireWorkspace);
 
-router.post('/parse', AiController.parseText);
+// Phase 2: Ingestion
+router.post('/parse-input', AiController.parseInput);
+router.post('/parse', AiController.parseInput);
 router.post('/commit', AiController.commitBatch);
 router.post('/undo/:batchId', AiController.undoBatch);
-router.post('/ask', AiController.ask);
+
+// Phase 3: Natural Language Database Q&A
+router.post('/query', AiController.query);
+router.post('/ask', AiController.query);
 
 export const aiRoutes = router;

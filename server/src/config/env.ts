@@ -7,5 +7,6 @@ export const ENV = {
   MONGO_URI: process.env.MONGO_URI || 'mongodb://127.0.0.1:27017/dms',
   JWT_SECRET: process.env.JWT_SECRET || 'dev_jwt_secret_dms_united_pakistan_2026',
   JWT_EXPIRES_IN: process.env.JWT_EXPIRES_IN || '7d',
-  CORS_ORIGIN: process.env.CORS_ORIGIN || '*'
+  CORS_ORIGIN: process.env.CORS_ORIGIN || '*',
+  GEMINI_API_KEY: process.env.GEMINI_API_KEY || ''
 };

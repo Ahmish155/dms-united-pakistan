@@ -365,7 +365,9 @@ export const PeoplePage: React.FC = () => {
               ) : (
                 daeenCandidates.map((daeen) => {
                   const associated = people.filter(
-                    (p) => (p.defaultDaeenId?._id || p.defaultDaeenId) === daeen._id
+                    (p) =>
+                      (p.defaultDaeenId?._id || p.defaultDaeenId) === daeen._id ||
+                      (daeen.associatedPersonIds && daeen.associatedPersonIds.includes(p._id))
                   );
                   return (
                     <div key={daeen._id} className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
@@ -374,7 +376,6 @@ export const PeoplePage: React.FC = () => {
                           <Link to={`/people/${daeen._id}`} className="font-bold text-sm text-typography-main hover:text-brand-red flex items-center gap-1.5">
                             <Shield className="h-4 w-4 text-brand-red" />
                             <span>{daeen.fullName}</span>
-                            <span className="text-[10px] font-mono text-typography-secondary font-normal">({daeen.internalId})</span>
                           </Link>
                           <p className="text-[11px] text-typography-secondary mt-0.5">
                             Sector Resource • Meetings Conducted: <span className="font-bold text-typography-main">{daeen.totalMeetingsConducted || 0}</span>
@@ -452,7 +453,6 @@ export const PeoplePage: React.FC = () => {
                           <Link to={`/people/${rabtakar._id}`} className="font-bold text-sm text-typography-main hover:text-brand-red flex items-center gap-1.5">
                             <UserCheck className="h-4 w-4 text-brand-red" />
                             <span>{rabtakar.fullName}</span>
-                            <span className="text-[10px] font-mono text-typography-secondary font-normal">({rabtakar.internalId})</span>
                           </Link>
                           <p className="text-[11px] text-typography-secondary mt-0.5">
                             Unit: <span className="font-semibold">{rabtakar.currentUnitId?.name || 'Multi-Unit'}</span> • Total Provided: <span className="font-bold text-typography-main">{provided.length}</span> ({activeCount} active, {pipelineCount} pipeline)
@@ -542,6 +542,8 @@ export const PeoplePage: React.FC = () => {
             const isPipeline = person.operationalStatus === OperationalStatus.PIPELINE;
             const isFreezed = person.operationalStatus === OperationalStatus.FREEZED;
             const isDropped = person.operationalStatus === OperationalStatus.DROPPED;
+            const isDaeen = person.currentStage === PersonStage.DAEEN || person.roles?.includes(OrganizationalResponsibility.DAEEN);
+            const isRabtakar = person.currentStage === PersonStage.RABTAKAR || person.roles?.includes(OrganizationalResponsibility.RABTAKAR);
 
             return (
               <div
@@ -559,9 +561,6 @@ export const PeoplePage: React.FC = () => {
                       <ChevronRight className="h-3.5 w-3.5 text-typography-muted" />
                     </Link>
                     <div className="flex items-center gap-2 mt-0.5">
-                      <span className="font-mono text-[10px] text-typography-secondary">
-                        {person.internalId}
-                      </span>
                       <span className="text-[10px] bg-surface-secondary px-1.5 py-0.2 rounded font-medium text-typography-main">
                         {person.currentStage === PersonStage.DAEEN
                           ? 'Sector Resource'
@@ -647,11 +646,30 @@ export const PeoplePage: React.FC = () => {
                       </span>
                     </div>
                   )}
-                  {person.activeAssociatedMaduCount !== undefined && (
+                  {/* Daeen specific counts */}
+                  {isDaeen && (
+                    <>
+                      <div className="flex justify-between">
+                        <span>Meetings Conducted:</span>
+                        <span className="font-bold text-typography-main">
+                          {person.totalMeetingsConducted || 0}
+                        </span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span>Madu & MDF in Care:</span>
+                        <span className="font-medium text-typography-main">
+                          {person.daeenAssociatedMaduCount || 0} Madu · {person.daeenAssociatedMdfCount || 0} MDF ({person.daeenTotalAssociatedCount || 0} total)
+                        </span>
+                      </div>
+                    </>
+                  )}
+
+                  {/* Rabtakar specific counts */}
+                  {isRabtakar && (
                     <div className="flex justify-between">
-                      <span>Associated Madu:</span>
+                      <span>Contacts Provided:</span>
                       <span className="font-medium text-typography-main">
-                        {person.activeAssociatedMaduCount} active / {person.totalAssociatedMaduCount} total
+                        {person.rabtakarProvidedMaduCount || 0} Madu · {person.rabtakarProvidedMdfCount || 0} MDF ({person.rabtakarTotalProvidedCount || 0} total)
                       </span>
                     </div>
                   )}

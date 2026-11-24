@@ -13,10 +13,12 @@ import {
   CalendarDays,
   MessageSquare,
   Trash2,
-  ArrowRight,
   HelpCircle,
   Loader2,
-  Copy
+  Database,
+  ChevronDown,
+  ChevronRight,
+  Code2
 } from 'lucide-react';
 import { PersonStage, OperationalStatus } from '@dms/shared';
 
@@ -72,12 +74,16 @@ interface ChatMessage {
   sender: 'user' | 'assistant';
   text: string;
   timestamp: Date;
+  collection?: string;
+  pipeline?: any[];
+  rawResult?: any[];
+  rawResultCount?: number;
 }
 
 export const AiAssistantPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<'ingestion' | 'chat'>('ingestion');
 
-  // Ingestion State
+  // Ingestion State (Phase 2)
   const [rawText, setRawText] = useState('');
   const [isParsing, setIsParsing] = useState(false);
   const [parsedData, setParsedData] = useState<ParsedPayload | null>(null);
@@ -91,17 +97,22 @@ export const AiAssistantPage: React.FC = () => {
   const [isUndoing, setIsUndoing] = useState(false);
   const [undoMessage, setUndoMessage] = useState<string | null>(null);
 
-  // Chat State
+  // Chat / Q&A State (Phase 3)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([
     {
       id: 'welcome',
       sender: 'assistant',
-      text: 'Assalam-o-Alaikum! Main aapka Dawati AI Assistant hoon. Aap mujh se Roman Urdu, Urdu ya English mein workspace ka koi bhi sawal pooch saktay hain. Maslan: *"Mujhe sab Madueen ki list chahiye"* ya *"Pichlay 3 dinon mein kitni meetings hui hain?"*',
+      text: 'Assalam-o-Alaikum! Main aapka Dawati Two-Way AI Agent hoon (powered by Gemini & live MongoDB Aggregations). Aap mujh se Roman Urdu, Urdu ya English mein ad-hoc sawal pooch saktay hain. Maslan: *"Mujhe sab Madueen ki list chahiye"*, *"Pichlay 3 dinon mein kitni meetings hui hain?"*, ya *"Active RMM aur weekly targets kya hain?"*',
       timestamp: new Date()
     }
   ]);
   const [questionInput, setQuestionInput] = useState('');
   const [isAsking, setIsAsking] = useState(false);
+  const [expandedPipelines, setExpandedPipelines] = useState<Record<string, boolean>>({});
+
+  const togglePipelineExpand = (id: string) => {
+    setExpandedPipelines((prev) => ({ ...prev, [id]: !prev[id] }));
+  };
 
   // Sample Raw Text Ingestion Examples
   const handleLoadSample = (sampleType: 'whatsapp' | 'rmm' | 'mixed') => {
@@ -123,7 +134,7 @@ export const AiAssistantPage: React.FC = () => {
     setUndoMessage(null);
   };
 
-  // Step 1: Parse Raw Text
+  // Phase 2 Step 1: Parse Raw Input Text (Strict schema, temperature: 0, NO MongoDB write)
   const handleParseText = async () => {
     if (!rawText.trim()) return;
     setIsParsing(true);
@@ -132,7 +143,7 @@ export const AiAssistantPage: React.FC = () => {
     setUndoMessage(null);
 
     try {
-      const res = await ApiService.post<ParsedPayload>('/ai/parse', { text: rawText });
+      const res = await ApiService.post<ParsedPayload>('/ai/parse-input', { text: rawText });
       setParsedData(res);
     } catch (err: any) {
       setParseError(err.message || 'Failed to extract information from raw text');
@@ -141,8 +152,8 @@ export const AiAssistantPage: React.FC = () => {
     }
   };
 
-  // Step 2: Commit Batch
-  const handleCommit = async () => {
+  // Phase 2 Step 2: Human-in-the-Loop "Approve & Save" (Commits structured JSON to MongoDB)
+  const handleApproveAndSave = async () => {
     if (!parsedData) return;
     setIsCommitting(true);
     try {
@@ -151,15 +162,15 @@ export const AiAssistantPage: React.FC = () => {
       setParsedData(null);
       setRawText('');
     } catch (err: any) {
-      alert(err.message || 'Failed to commit batch');
+      alert(err.message || 'Failed to commit batch to MongoDB');
     } finally {
       setIsCommitting(false);
     }
   };
 
-  // Step 3: Undo Batch
+  // Step 3: Undo Batch (Reverts committed entities)
   const handleUndo = async (batchId: string) => {
-    if (!window.confirm('Are you sure you want to revert this batch? All entities created in this batch will be safely removed.')) {
+    if (!window.confirm('Are you sure you want to revert this batch? All entities created in this batch will be safely removed from MongoDB.')) {
       return;
     }
     setIsUndoing(true);
@@ -174,7 +185,7 @@ export const AiAssistantPage: React.FC = () => {
     }
   };
 
-  // Chat Submission
+  // Phase 3: Text-to-Aggregation Pipeline & Grounded Q&A
   const handleSendMessage = async (textToSend?: string) => {
     const q = (textToSend || questionInput).trim();
     if (!q || isAsking) return;
@@ -191,19 +202,30 @@ export const AiAssistantPage: React.FC = () => {
     setIsAsking(true);
 
     try {
-      const res = await ApiService.post<{ answer: string }>('/ai/ask', { question: q });
+      const res = await ApiService.post<{
+        answer: string;
+        collection?: string;
+        pipeline?: any[];
+        rawResult?: any[];
+        rawResultCount?: number;
+      }>('/ai/query', { question: q });
+
       const botMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'assistant',
         text: res.answer,
-        timestamp: new Date()
+        timestamp: new Date(),
+        collection: res.collection,
+        pipeline: res.pipeline,
+        rawResult: res.rawResult,
+        rawResultCount: res.rawResultCount
       };
       setChatMessages((prev) => [...prev, botMsg]);
     } catch (err: any) {
       const errorMsg: ChatMessage = {
         id: (Date.now() + 1).toString(),
         sender: 'assistant',
-        text: `Error processing question: ${err.message || 'Service unavailable'}`,
+        text: `Error executing query: ${err.message || 'Service unavailable'}`,
         timestamp: new Date()
       };
       setChatMessages((prev) => [...prev, errorMsg]);
@@ -222,11 +244,11 @@ export const AiAssistantPage: React.FC = () => {
               <Sparkles className="h-4 w-4" />
             </span>
             <h1 className="text-xl font-bold text-typography-main">
-              AI Dawati Assistant & Smart Ingestion
+              Two-Way AI Agent & Natural Language Engine
             </h1>
           </div>
           <p className="mt-1 text-xs text-typography-secondary">
-            Paste raw text reports (WhatsApp, RMM, Sector notes) to ingest instantly, or query live records in Roman Urdu, Urdu or English.
+            Strict schema text-to-database ingestion with human-in-the-loop review, and natural language database Q&A powered by MongoDB Aggregations.
           </p>
         </div>
 
@@ -241,7 +263,7 @@ export const AiAssistantPage: React.FC = () => {
             }`}
           >
             <FileText className="h-3.5 w-3.5" />
-            Smart Ingestion
+            Text-to-Database Ingestion
           </button>
           <button
             onClick={() => setActiveTab('chat')}
@@ -252,12 +274,12 @@ export const AiAssistantPage: React.FC = () => {
             }`}
           >
             <Bot className="h-3.5 w-3.5" />
-            Workspace Q&A
+            Natural Language Database Q&A
           </button>
         </div>
       </div>
 
-      {/* TAB 1: SMART DATA INGESTION */}
+      {/* TAB 1: PHASE 2 UNSTRUCTURED TEXT INGESTION */}
       {activeTab === 'ingestion' && (
         <div className="space-y-6">
           {/* Commit Success Banner with Undo */}
@@ -270,7 +292,7 @@ export const AiAssistantPage: React.FC = () => {
                     {commitResult.message}
                   </h4>
                   <p className="text-xs text-emerald-700 mt-0.5">
-                    Batch Reference: <code className="font-mono">{commitResult.batchId}</code> — Total {commitResult.totalCreated} items created.
+                    Batch Reference: <code className="font-mono">{commitResult.batchId}</code> — Total {commitResult.totalCreated} items successfully committed.
                   </p>
                 </div>
               </div>
@@ -311,7 +333,7 @@ export const AiAssistantPage: React.FC = () => {
               <div className="flex items-center gap-2">
                 <Sparkles className="h-4 w-4 text-brand-red" />
                 <h3 className="text-sm font-bold text-typography-main">
-                  Paste Raw Unstructured Dawati Notes / WhatsApp Text
+                  Paste Unstructured Chat Logs, WhatsApp Reports, or Notes
                 </h3>
               </div>
 
@@ -353,7 +375,7 @@ export const AiAssistantPage: React.FC = () => {
             <div className="flex items-center justify-between pt-2">
               <p className="text-[11px] text-typography-tertiary flex items-center gap-1">
                 <HelpCircle className="h-3.5 w-3.5" />
-                The AI automatically maps names to registered Units, Rabtakars & Daeen with fallback heuristics.
+                Strict schema enforcement with temperature 0. Missing fields are returned as null and never hallucinated.
               </p>
               <button
                 type="button"
@@ -364,7 +386,7 @@ export const AiAssistantPage: React.FC = () => {
                 {isParsing ? (
                   <>
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span>Analyzing & Extracting...</span>
+                    <span>Extracting Structured Records...</span>
                   </>
                 ) : (
                   <>
@@ -376,17 +398,17 @@ export const AiAssistantPage: React.FC = () => {
             </div>
           </div>
 
-          {/* Extracted Data Review & Commit Section */}
+          {/* HUMAN-IN-THE-LOOP PREVIEW & APPROVAL SECTION */}
           {parsedData && (
             <div className="space-y-4 rounded-xl border border-surface-border bg-slate-50/70 p-5">
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-b border-surface-border pb-3">
                 <div>
                   <h3 className="text-sm font-bold text-typography-main flex items-center gap-2">
                     <CheckCircle2 className="h-4 w-4 text-emerald-600" />
-                    Extraction Preview & Verification
+                    Human-in-the-Loop Verification
                   </h3>
                   <p className="text-xs text-typography-secondary">
-                    Review extracted records before committing to the database. You can delete or edit items.
+                    Review and edit extracted records before committing to MongoDB. Nothing is written until you click "Approve & Save".
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
@@ -399,7 +421,7 @@ export const AiAssistantPage: React.FC = () => {
                   </button>
                   <button
                     type="button"
-                    onClick={handleCommit}
+                    onClick={handleApproveAndSave}
                     disabled={isCommitting}
                     className="btn-primary inline-flex items-center gap-1.5 text-xs py-2 px-4 bg-emerald-600 hover:bg-emerald-700 shadow-sm"
                   >
@@ -408,7 +430,7 @@ export const AiAssistantPage: React.FC = () => {
                     ) : (
                       <CheckCircle2 className="h-4 w-4" />
                     )}
-                    <span>Commit All to Workspace</span>
+                    <span>Approve & Save</span>
                   </button>
                 </div>
               </div>
@@ -449,6 +471,11 @@ export const AiAssistantPage: React.FC = () => {
                         {p.rabtakarName && (
                           <div className="text-[11px] text-typography-secondary">
                             <span className="font-semibold">Rabtakar:</span> {p.rabtakarName}
+                          </div>
+                        )}
+                        {p.daeenName && (
+                          <div className="text-[11px] text-typography-secondary">
+                            <span className="font-semibold">Daeen:</span> {p.daeenName}
                           </div>
                         )}
                         {p.contactNumber && (
@@ -493,6 +520,11 @@ export const AiAssistantPage: React.FC = () => {
                         {m.unitName && (
                           <div className="text-[11px] text-typography-secondary">
                             <span className="font-semibold">Unit:</span> {m.unitName}
+                          </div>
+                        )}
+                        {m.meetingDate && (
+                          <div className="text-[11px] text-typography-secondary">
+                            <span className="font-semibold">Date:</span> {m.meetingDate}
                           </div>
                         )}
                         {m.comments && (
@@ -588,9 +620,9 @@ export const AiAssistantPage: React.FC = () => {
         </div>
       )}
 
-      {/* TAB 2: WORKSPACE ASSISTANT CHAT */}
+      {/* TAB 2: PHASE 3 NATURAL LANGUAGE DATABASE Q&A */}
       {activeTab === 'chat' && (
-        <div className="rounded-xl border border-surface-border bg-white shadow-sm flex flex-col h-[650px]">
+        <div className="rounded-xl border border-surface-border bg-white shadow-sm flex flex-col h-[680px]">
           {/* Chat Header */}
           <div className="flex items-center justify-between border-b border-surface-border p-4 bg-slate-50/50 rounded-t-xl">
             <div className="flex items-center gap-3">
@@ -598,11 +630,14 @@ export const AiAssistantPage: React.FC = () => {
                 <Bot className="h-5 w-5" />
               </div>
               <div>
-                <h3 className="text-sm font-bold text-typography-main">
-                  Dawati Q&A Assistant
+                <h3 className="text-sm font-bold text-typography-main flex items-center gap-2">
+                  <span>Natural Language Database Q&A</span>
+                  <span className="rounded bg-emerald-100 text-emerald-800 px-2 py-0.5 text-[10px] font-bold">
+                    Text-to-Aggregation Engine
+                  </span>
                 </h3>
                 <p className="text-[11px] text-typography-secondary">
-                  Powered by live workspace context & Gemini engine (Roman Urdu, Urdu, English)
+                  Ask ad-hoc questions in Roman Urdu, Urdu or English. All counting, filtering, and math are executed directly in MongoDB.
                 </p>
               </div>
             </div>
@@ -649,7 +684,7 @@ export const AiAssistantPage: React.FC = () => {
                   </div>
                 )}
                 <div
-                  className={`max-w-[85%] sm:max-w-[75%] rounded-2xl p-3.5 text-xs shadow-xs ${
+                  className={`max-w-[85%] sm:max-w-[80%] rounded-2xl p-4 text-xs shadow-xs space-y-2 ${
                     msg.sender === 'user'
                       ? 'bg-brand-red text-white rounded-tr-none'
                       : 'bg-surface-secondary text-typography-main rounded-tl-none border border-surface-border'
@@ -658,8 +693,57 @@ export const AiAssistantPage: React.FC = () => {
                   <div className="whitespace-pre-wrap leading-relaxed">
                     {msg.text}
                   </div>
+
+                  {/* MongoDB Pipeline & Grounded Raw Data Expandable Drawer */}
+                  {msg.pipeline && (
+                    <div className="pt-2 border-t border-slate-200 mt-2">
+                      <button
+                        type="button"
+                        onClick={() => togglePipelineExpand(msg.id)}
+                        className="inline-flex items-center gap-1.5 text-[11px] font-semibold text-brand-red hover:underline"
+                      >
+                        {expandedPipelines[msg.id] ? (
+                          <ChevronDown className="h-3.5 w-3.5" />
+                        ) : (
+                          <ChevronRight className="h-3.5 w-3.5" />
+                        )}
+                        <Database className="h-3 w-3" />
+                        <span>
+                          {expandedPipelines[msg.id]
+                            ? 'Hide MongoDB Aggregation Pipeline'
+                            : `View Executed MongoDB Pipeline (${msg.collection} · ${msg.rawResultCount || 0} records)`}
+                        </span>
+                      </button>
+
+                      {expandedPipelines[msg.id] && (
+                        <div className="mt-2 space-y-2 text-[11px] bg-slate-900 text-slate-100 p-3 rounded-lg font-mono overflow-x-auto">
+                          <div>
+                            <span className="text-amber-400 font-bold">Target Collection:</span>{' '}
+                            <span>{msg.collection}</span>
+                          </div>
+                          <div>
+                            <span className="text-emerald-400 font-bold">MongoDB Aggregation Pipeline:</span>
+                            <pre className="mt-1 text-[10px] text-slate-200 whitespace-pre-wrap">
+                              {JSON.stringify(msg.pipeline, null, 2)}
+                            </pre>
+                          </div>
+                          {msg.rawResult && msg.rawResult.length > 0 && (
+                            <div>
+                              <span className="text-cyan-400 font-bold">
+                                Database Grounded Records ({msg.rawResult.length}):
+                              </span>
+                              <pre className="mt-1 text-[10px] text-slate-300 max-h-48 overflow-y-auto whitespace-pre-wrap">
+                                {JSON.stringify(msg.rawResult, null, 2)}
+                              </pre>
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
                   <div
-                    className={`mt-1.5 text-[10px] ${
+                    className={`text-[10px] ${
                       msg.sender === 'user' ? 'text-white/70 text-right' : 'text-typography-tertiary'
                     }`}
                   >
@@ -677,9 +761,9 @@ export const AiAssistantPage: React.FC = () => {
                 <div className="flex h-8 w-8 shrink-0 items-center justify-center rounded-full bg-brand-red/10 text-brand-red">
                   <Bot className="h-4 w-4" />
                 </div>
-                <div className="rounded-2xl rounded-tl-none border border-surface-border bg-surface-secondary p-3 text-xs flex items-center gap-2 text-typography-secondary">
+                <div className="rounded-2xl rounded-tl-none border border-surface-border bg-surface-secondary p-3.5 text-xs flex items-center gap-2 text-typography-secondary">
                   <Loader2 className="h-4 w-4 animate-spin text-brand-red" />
-                  <span>Checking live workspace records...</span>
+                  <span>Synthesizing MongoDB aggregation pipeline & querying database...</span>
                 </div>
               </div>
             )}
@@ -722,7 +806,7 @@ export const AiAssistantPage: React.FC = () => {
               type="text"
               value={questionInput}
               onChange={(e) => setQuestionInput(e.target.value)}
-              placeholder="Poochiye: 'Mujhe sab Madueen ki list chahiye' ya 'Pichlay 3 dinon mein kitni meetings hui hain?'..."
+              placeholder="Ask anything (e.g., 'mujy sab maudeen ki list chahiya', 'pichlay 3 dinu main kitni meetings hoi')..."
               className="flex-1 rounded-lg border border-surface-border px-3.5 py-2.5 text-xs text-typography-main focus:border-brand-red focus:outline-none focus:ring-1 focus:ring-brand-red"
             />
             <button
@@ -731,7 +815,7 @@ export const AiAssistantPage: React.FC = () => {
               className="btn-primary inline-flex items-center gap-1.5 py-2.5 px-4 text-xs shadow-sm"
             >
               <Send className="h-3.5 w-3.5" />
-              <span>Send</span>
+              <span>Send Query</span>
             </button>
           </form>
         </div>

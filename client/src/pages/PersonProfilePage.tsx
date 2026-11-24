@@ -231,8 +231,6 @@ export const PersonProfilePage: React.FC = () => {
             </div>
 
             <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-typography-secondary">
-              <span className="font-mono font-semibold">{person.internalId}</span>
-              <span>•</span>
               <span className="flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5 text-brand-red" />
                 {isDaeen ? 'Sector Resource (All Units)' : person.currentUnitId?.name || 'No Unit'}
@@ -765,6 +763,59 @@ export const PersonProfilePage: React.FC = () => {
               </div>
             )}
           </div>
+
+          {/* DAEEN ASSOCIATED CONTACTS LIST */}
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-typography-main flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-red" />
+                <span>Madu & MDF Contacts Associated in Care ({daeenAssociatedMadu?.length || 0})</span>
+              </h2>
+            </div>
+
+            {!daeenAssociatedMadu || daeenAssociatedMadu.length === 0 ? (
+              <p className="text-xs text-typography-secondary italic py-2">
+                No Madu contacts currently assigned to or met with this Daeen.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
+                    <tr>
+                      <th className="p-2.5">Name</th>
+                      <th className="p-2.5">Stage</th>
+                      <th className="p-2.5">Unit</th>
+                      <th className="p-2.5">Rabtakar</th>
+                      <th className="p-2.5">Lifecycle Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-border">
+                    {daeenAssociatedMadu.map((m: any) => (
+                      <tr key={m._id} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-bold">
+                          <Link to={`/people/${m._id}`} className="hover:text-brand-red">
+                            {m.fullName}
+                          </Link>
+                        </td>
+                        <td className="p-2.5">
+                          <span className="rounded bg-brand-red-light px-1.5 py-0.5 text-[10px] font-semibold text-brand-red">
+                            {m.currentStage}
+                          </span>
+                        </td>
+                        <td className="p-2.5">{m.currentUnitId?.name || 'N/A'}</td>
+                        <td className="p-2.5 text-typography-secondary">{m.primaryRabtakarId?.fullName || '—'}</td>
+                        <td className="p-2.5">
+                          <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-green-100 text-status-success">
+                            {m.operationalStatus || 'ACTIVE'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
         </div>
       )}
 
@@ -822,6 +873,59 @@ export const PersonProfilePage: React.FC = () => {
                                 : 'bg-green-100 text-status-success'
                             }`}
                           >
+                            {m.operationalStatus || 'ACTIVE'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* DAEEN ASSOCIATED CONTACTS LIST */}
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-typography-main flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-red" />
+                <span>Madu & MDF Contacts Associated in Care ({daeenAssociatedMadu?.length || 0})</span>
+              </h2>
+            </div>
+
+            {!daeenAssociatedMadu || daeenAssociatedMadu.length === 0 ? (
+              <p className="text-xs text-typography-secondary italic py-2">
+                No Madu contacts currently assigned to or met with this Daeen.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
+                    <tr>
+                      <th className="p-2.5">Name</th>
+                      <th className="p-2.5">Stage</th>
+                      <th className="p-2.5">Unit</th>
+                      <th className="p-2.5">Rabtakar</th>
+                      <th className="p-2.5">Lifecycle Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-border">
+                    {daeenAssociatedMadu.map((m: any) => (
+                      <tr key={m._id} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-bold">
+                          <Link to={`/people/${m._id}`} className="hover:text-brand-red">
+                            {m.fullName}
+                          </Link>
+                        </td>
+                        <td className="p-2.5">
+                          <span className="rounded bg-brand-red-light px-1.5 py-0.5 text-[10px] font-semibold text-brand-red">
+                            {m.currentStage}
+                          </span>
+                        </td>
+                        <td className="p-2.5">{m.currentUnitId?.name || 'N/A'}</td>
+                        <td className="p-2.5 text-typography-secondary">{m.primaryRabtakarId?.fullName || '—'}</td>
+                        <td className="p-2.5">
+                          <span className="rounded px-1.5 py-0.5 text-[10px] font-bold bg-green-100 text-status-success">
                             {m.operationalStatus || 'ACTIVE'}
                           </span>
                         </td>

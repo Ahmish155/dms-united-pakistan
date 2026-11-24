@@ -1,5 +1,6 @@
-import { Types } from 'mongoose';
+import mongoose, { Types } from 'mongoose';
 import crypto from 'crypto';
+import { GoogleGenAI, Type } from '@google/genai';
 import { AiBatchLogModel } from './ai.model';
 import { PersonModel } from '../people/person.model';
 import { UnitModel } from '../units/unit.model';
@@ -9,228 +10,213 @@ import { GroupMeetingModel, GmAttendanceModel } from '../gm/gm.model';
 import { RmmModel, RmmTargetModel } from '../rmm/rmm.model';
 import { PersonStage, OrganizationalResponsibility, OperationalStatus } from '@dms/shared';
 import { AppError } from '../../middleware/errorHandler';
+import { getLiveAiContext } from './aiContext';
+import { ENV } from '../../config/env';
 
-const GEMINI_SYSTEM_INSTRUCTION = `
-You are the AI Data Engine & Ingestion Assistant for the Dawati Management System (DMS) in Pakistan.
-The organizational hierarchy and business rules are:
-1. Sector Workspace: top-level dawati sector with Units.
-2. Units: geographical dawati units (e.g. Unit 1, Gulraiz, Satellite Town).
-3. People & Stages:
-   - MADU: newly approached contact / candidate. Associated with a Rabtakar and Unit.
-   - MDF: promoted contact actively participating in Dialogue Forums.
-   - RABTAKAR: responsible member connecting Madu/MDF. Can serve multiple units simultaneously.
-   - DAEEN: sector-wide preaching/instruction resource (does NOT belong to any single unit).
-   - Operational Statuses: ACTIVE, INACTIVE, PIPELINE, FREEZED, DROPPED.
-4. Meetings & Sessions:
-   - Individual Meeting (IM): one-on-one session with Madu/MDF, Rabtakar, and Daeen.
-   - Dialogue Forum (DF): unit-level intellectual forum led by a Mentor with attendance.
-   - Group Meeting (GM): group congregation led by a Facilitator with attendance.
-   - RMM: weekly planning meeting per unit setting weekly targets.
-   - DMM: monthly planning meeting per sector setting monthly targets.
-`;
+// Allowed Collections for Read-Only Aggregations
+const ALLOWED_COLLECTIONS = new Set([
+  'people',
+  'units',
+  'individualmeetings',
+  'dialogueforums',
+  'dfattendances',
+  'groupmeetings',
+  'gmattendances',
+  'rmms',
+  'rmmtargets',
+  'dmms',
+  'dmmtargets',
+  'workspacesettings'
+]);
+
+// Forbidden Mutative Pipeline Stages / Operators
+const FORBIDDEN_OPERATORS = [
+  '$out',
+  '$merge',
+  '$delete',
+  '$update',
+  '$drop',
+  '$set',
+  '$unset',
+  'dropDatabase',
+  'deleteMany',
+  'deleteOne',
+  'updateMany',
+  'updateOne'
+];
 
 export class AiService {
-  private static getGeminiApiKey(): string | undefined {
-    return process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
-  }
-
-  private static async callGemini(prompt: string, jsonMode = false): Promise<string> {
-    const apiKey = this.getGeminiApiKey();
-    if (!apiKey) {
-      throw new Error('GEMINI_API_KEY_NOT_CONFIGURED');
-    }
-
-    const url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash:generateContent?key=${apiKey}`;
-    const body: any = {
-      contents: [{ parts: [{ text: prompt }] }],
-      systemInstruction: { parts: [{ text: GEMINI_SYSTEM_INSTRUCTION }] }
-    };
-
-    if (jsonMode) {
-      body.generationConfig = { responseMimeType: 'application/json' };
-    }
-
-    const res = await fetch(url, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body)
-    });
-
-    if (!res.ok) {
-      const errText = await res.text();
-      throw new Error(`Gemini API Error (${res.status}): ${errText}`);
-    }
-
-    const data = await res.json();
-    return data.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  private static getGeminiClient(): GoogleGenAI | null {
+    const apiKey = ENV.GEMINI_API_KEY || process.env.GEMINI_API_KEY || process.env.GOOGLE_API_KEY;
+    if (!apiKey) return null;
+    return new GoogleGenAI({ apiKey });
   }
 
   /**
-   * Parse raw text (notes, WhatsApp summaries, rosters, meeting records) into structured actions
+   * Phase 2: Unstructured Text-to-Database Ingestion
+   * Strict Schema Enforcement using gemini-2.5-flash with temperature: 0
+   * Human-in-the-loop: Does NOT write to MongoDB. Returns structured JSON for frontend review.
    */
   static async parseRawText(workspaceId: string, rawText: string) {
-    const wId = new Types.ObjectId(workspaceId);
-    const [units, people, mentors] = await Promise.all([
-      UnitModel.find({ workspaceId: wId, isActive: true }).select('name code').lean(),
-      PersonModel.find({ workspaceId: wId, isArchived: false }).select('fullName currentStage internalId currentUnitId').lean(),
-      DfMentorModel.find({ workspaceId: wId, isActive: true }).select('name').lean()
-    ]);
+    const ai = this.getGeminiClient();
+    const liveContext = await getLiveAiContext(workspaceId);
 
-    const contextDesc = `
-Available Workspace Units: ${units.map((u: any) => u.name).join(', ') || 'None yet'}
-Available Existing People: ${people.map((p: any) => `${p.fullName} (${p.currentStage})`).slice(0, 30).join(', ')}
-Available Mentors: ${mentors.map((m: any) => m.name).join(', ') || 'None yet'}
-`;
+    const antiHallucinationPrompt = `
+Extract structured records from the provided raw text for review before saving into the Dawati Management System.
 
-    try {
-      const prompt = `
-Extract structured records from the following raw text for insertion into the Dawati Management System.
-${contextDesc}
+Instructions:
+1. Extract data strictly from the provided input text using the exact schemas and business rules defined in context.
+2. If any value, date, or field is missing, ambiguous, or not explicitly stated, return null. Never guess, assume, or invent data.
+3. Match names against active units and roles defined in the workspace context.
 
-Raw Text to Extract:
+Raw Input Text:
 """
 ${rawText}
 """
-
-Return a valid JSON object matching this schema:
-{
-  "summary": "Brief explanation of what was extracted",
-  "people": [
-    {
-      "fullName": "Name",
-      "contactNumber": "Optional phone",
-      "currentStage": "MADU | MDF | RABTAKAR | DAEEN | OTHER",
-      "operationalStatus": "ACTIVE | PIPELINE | FREEZED | DROPPED",
-      "unitName": "Unit name if specified",
-      "rabtakarName": "Rabtakar name if mentioned",
-      "daeenName": "Daeen name if mentioned",
-      "notes": "Any notes"
-    }
-  ],
-  "meetings": [
-    {
-      "personName": "Madu or attendee name",
-      "unitName": "Unit name",
-      "rabtakarName": "Rabtakar name",
-      "primaryDaeenName": "Daeen name",
-      "meetingDate": "YYYY-MM-DD",
-      "comments": "Meeting notes"
-    }
-  ],
-  "rmm": [
-    {
-      "unitName": "Unit name",
-      "rmmDate": "YYYY-MM-DD",
-      "weekStartDate": "YYYY-MM-DD",
-      "weekEndDate": "YYYY-MM-DD",
-      "plannedMaduMeetings": 0,
-      "plannedMdfMeetings": 0,
-      "comments": "Weekly targets summary"
-    }
-  ],
-  "dialogueForums": [
-    {
-      "topic": "Topic of discussion",
-      "unitName": "Unit name",
-      "mentorName": "Mentor name",
-      "date": "YYYY-MM-DD",
-      "attendeeNames": ["Attendee 1", "Attendee 2"],
-      "comments": "Comments"
-    }
-  ]
-}
 `;
 
-      const jsonStr = await this.callGemini(prompt, true);
-      const parsed = JSON.parse(jsonStr);
-      return parsed;
-    } catch (err: any) {
-      console.warn('Gemini parser fallback activated:', err.message);
-      // Fallback: heuristic extraction from text lines
-      return this.heuristicExtraction(rawText, units, people);
-    }
-  }
+    if (ai) {
+      try {
+        const response = await ai.models.generateContent({
+          model: 'gemini-2.5-flash',
+          contents: antiHallucinationPrompt,
+          config: {
+            systemInstruction: liveContext,
+            temperature: 0,
+            responseMimeType: 'application/json',
+            responseSchema: {
+              type: Type.OBJECT,
+              properties: {
+                summary: { type: Type.STRING },
+                people: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      fullName: { type: Type.STRING },
+                      contactNumber: { type: Type.STRING, nullable: true },
+                      unitName: { type: Type.STRING, nullable: true },
+                      currentStage: {
+                        type: Type.STRING,
+                        enum: ['MADU', 'MDF', 'RABTAKAR', 'DAEEN', 'OTHER'],
+                        nullable: true
+                      },
+                      operationalStatus: {
+                        type: Type.STRING,
+                        enum: ['PIPELINE', 'ACTIVE', 'INACTIVE', 'FREEZED', 'DROPPED'],
+                        nullable: true
+                      },
+                      rabtakarName: { type: Type.STRING, nullable: true },
+                      daeenName: { type: Type.STRING, nullable: true },
+                      notes: { type: Type.STRING, nullable: true }
+                    },
+                    required: ['fullName']
+                  }
+                },
+                meetings: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      personName: { type: Type.STRING },
+                      meetingDate: { type: Type.STRING, nullable: true },
+                      unitName: { type: Type.STRING, nullable: true },
+                      primaryDaeenName: { type: Type.STRING, nullable: true },
+                      rabtakarName: { type: Type.STRING, nullable: true },
+                      comments: { type: Type.STRING, nullable: true }
+                    },
+                    required: ['personName']
+                  }
+                },
+                rmm: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      unitName: { type: Type.STRING, nullable: true },
+                      rmmDate: { type: Type.STRING, nullable: true },
+                      weekStartDate: { type: Type.STRING, nullable: true },
+                      weekEndDate: { type: Type.STRING, nullable: true },
+                      plannedMaduMeetings: { type: Type.NUMBER, nullable: true },
+                      plannedMdfMeetings: { type: Type.NUMBER, nullable: true },
+                      comments: { type: Type.STRING, nullable: true }
+                    }
+                  }
+                },
+                dialogueForums: {
+                  type: Type.ARRAY,
+                  items: {
+                    type: Type.OBJECT,
+                    properties: {
+                      unitName: { type: Type.STRING, nullable: true },
+                      date: { type: Type.STRING, nullable: true },
+                      mentorName: { type: Type.STRING, nullable: true },
+                      topic: { type: Type.STRING, nullable: true },
+                      comments: { type: Type.STRING, nullable: true },
+                      attendeeNames: {
+                        type: Type.ARRAY,
+                        items: { type: Type.STRING }
+                      }
+                    }
+                  }
+                }
+              },
+              required: ['summary']
+            }
+          }
+        });
 
-  private static heuristicExtraction(rawText: string, units: any[], people: any[]) {
-    const lines = rawText.split('\n').map((l) => l.trim()).filter(Boolean);
-    const extractedPeople: any[] = [];
-    const extractedMeetings: any[] = [];
-    let summary = `Parsed ${lines.length} lines of text using heuristic fallback.`;
-
-    for (const line of lines) {
-      // Check for bullet person entry
-      if (line.toLowerCase().includes('madu') || line.toLowerCase().includes('name:') || line.startsWith('-') || line.startsWith('•')) {
-        const cleaned = line.replace(/^[-•*]\s*/, '').replace(/madu:?/i, '').trim();
-        const parts = cleaned.split(/[,–-]/).map((p) => p.trim());
-        if (parts[0] && parts[0].length >= 2) {
-          extractedPeople.push({
-            fullName: parts[0],
-            contactNumber: parts.find((p) => /^\+?[0-9]{7,15}$/.test(p)),
-            currentStage: line.toLowerCase().includes('mdf')
-              ? PersonStage.MDF
-              : line.toLowerCase().includes('dae')
-              ? PersonStage.DAEEN
-              : line.toLowerCase().includes('rabtakar')
-              ? PersonStage.RABTAKAR
-              : PersonStage.MADU,
-            operationalStatus: line.toLowerCase().includes('pipeline')
-              ? OperationalStatus.PIPELINE
-              : OperationalStatus.ACTIVE,
-            unitName: units[0]?.name || '',
-            notes: line
-          });
-        }
+        const parsedJson = JSON.parse(response.text || '{}');
+        return parsedJson;
+      } catch (err: any) {
+        console.warn('Gemini parser API returned error, falling back to heuristic parser:', err.message);
       }
     }
 
-    return {
-      summary,
-      people: extractedPeople,
-      meetings: extractedMeetings,
-      rmm: [],
-      dialogueForums: []
-    };
+    // Heuristic Fallback
+    return this.heuristicParser(workspaceId, rawText);
   }
 
   /**
-   * Commit parsed records to database and log batch for 1-click Undo
+   * Commit verified AI batch to database upon explicit human approval ("Approve & Save")
    */
   static async commitBatch(workspaceId: string, parsedData: any, userId: string) {
     const wId = new Types.ObjectId(workspaceId);
     const uId = new Types.ObjectId(userId);
-    const batchId = `BATCH-${Date.now()}-${crypto.randomBytes(3).toString('hex').toUpperCase()}`;
+    const batchId = `ai_batch_${Date.now()}_${crypto.randomBytes(3).toString('hex')}`;
+    const createdEntities: Array<{ entityType: any; entityId: Types.ObjectId }> = [];
 
-    const createdEntities: Array<{
-      entityType: 'Person' | 'IndividualMeeting' | 'DialogueForum' | 'GroupMeeting' | 'Rmm' | 'Dmm';
-      entityId: Types.ObjectId;
-    }> = [];
-
-    // Pre-load reference maps
-    const [units, existingPeople, mentors] = await Promise.all([
-      UnitModel.find({ workspaceId: wId, isActive: true }),
-      PersonModel.find({ workspaceId: wId, isArchived: false }),
-      DfMentorModel.find({ workspaceId: wId, isActive: true })
+    // Preload lookup maps
+    const [units, people, mentors] = await Promise.all([
+      UnitModel.find({ workspaceId: wId, isActive: true }).lean(),
+      PersonModel.find({ workspaceId: wId, isArchived: false }).lean(),
+      DfMentorModel.find({ workspaceId: wId, isActive: true }).lean()
     ]);
 
     const unitMap = new Map<string, Types.ObjectId>();
-    for (const u of units) unitMap.set(u.name.toLowerCase().trim(), u._id);
-    const defaultUnitId = units[0]?._id;
+    units.forEach((u: any) => {
+      unitMap.set(u.name.toLowerCase().trim(), u._id);
+      unitMap.set(u.code.toLowerCase().trim(), u._id);
+    });
 
     const peopleMap = new Map<string, Types.ObjectId>();
-    for (const p of existingPeople) peopleMap.set(p.fullName.toLowerCase().trim(), p._id);
+    people.forEach((p: any) => {
+      peopleMap.set(p.fullName.toLowerCase().trim(), p._id);
+    });
+
+    const defaultUnitId = units[0]?._id;
 
     // 1. Commit People
     if (parsedData.people && Array.isArray(parsedData.people)) {
       for (const pData of parsedData.people) {
-        if (!pData.fullName) continue;
+        if (!pData.fullName || typeof pData.fullName !== 'string') continue;
+        const count = await PersonModel.countDocuments({ workspaceId: wId });
+        const internalId = `P-${String(count + 1).padStart(4, '0')}`;
 
-        let unitId = defaultUnitId;
+        let unitId = pData.currentStage === PersonStage.DAEEN ? undefined : defaultUnitId;
         if (pData.unitName && unitMap.has(pData.unitName.toLowerCase().trim())) {
           unitId = unitMap.get(pData.unitName.toLowerCase().trim())!;
         }
-
-        const count = await PersonModel.countDocuments({ workspaceId: wId });
-        const internalId = `UP-${(count + 1).toString().padStart(4, '0')}`;
 
         const rabtakarId = pData.rabtakarName && peopleMap.has(pData.rabtakarName.toLowerCase().trim())
           ? peopleMap.get(pData.rabtakarName.toLowerCase().trim())
@@ -290,7 +276,7 @@ Return a valid JSON object matching this schema:
           rabtakarId: rabtakarId || personId,
           primaryDaeenId: daeenId || personId,
           comments: mData.comments || 'Recorded via AI Assistant',
-          recordedById: uId
+          createdById: uId
         });
 
         createdEntities.push({ entityType: 'IndividualMeeting', entityId: meeting._id });
@@ -365,8 +351,8 @@ Return a valid JSON object matching this schema:
       }
     }
 
-    // Log Batch for Undo
-    const batchLog = await AiBatchLogModel.create({
+    // Log Batch for One-Click Undo
+    await AiBatchLogModel.create({
       workspaceId: wId,
       batchId,
       rawText: parsedData.summary || 'AI Batch Ingestion',
@@ -380,14 +366,14 @@ Return a valid JSON object matching this schema:
       batchId,
       totalCreated: createdEntities.length,
       createdEntitiesSummary: createdEntities.map((e) => e.entityType),
-      message: 'All extracted entities successfully applied to workspace!'
+      message: 'All extracted entities successfully verified and committed to workspace!'
     };
   }
 
   /**
-   * Revert / Undo a previously committed AI batch
+   * One-Click Undo a committed batch
    */
-  static async undoBatch(workspaceId: string, batchId: string, userId: string) {
+  static async undoBatch(workspaceId: string, batchId: string, _userId: string) {
     const wId = new Types.ObjectId(workspaceId);
     const batchLog = await AiBatchLogModel.findOne({ workspaceId: wId, batchId });
 
@@ -433,145 +419,341 @@ Return a valid JSON object matching this schema:
   }
 
   /**
-   * Human Language / Roman Urdu / Urdu Q&A over the Workspace
+   * Phase 3: Natural Language Database Q&A via Text-to-Aggregation Pipeline
+   * 1. Translates question into a strictly read-only MongoDB aggregation pipeline.
+   * 2. Inspects and blocks any mutative stage ($out, $merge, $delete, etc.).
+   * 3. Executes pipeline in MongoDB so the database handles all counting, filtering, and math.
+   * 4. Passes raw JSON DB result back to Gemini with strict grounded anti-hallucination prompt.
    */
-  static async askWorkspace(workspaceId: string, question: string) {
+  static async executeQuery(workspaceId: string, question: string) {
+    const ai = this.getGeminiClient();
+    const liveContext = await getLiveAiContext(workspaceId);
     const wId = new Types.ObjectId(workspaceId);
-    const now = new Date();
 
-    // Fetch live workspace snapshot
-    const [units, people, meetings3d, meetings7d, meetings30d, dfs, gms, rmms] = await Promise.all([
-      UnitModel.find({ workspaceId: wId, isActive: true }).select('name code').lean(),
-      PersonModel.find({ workspaceId: wId, isArchived: false })
-        .populate('currentUnitId', 'name')
-        .populate('primaryRabtakarId', 'fullName')
-        .populate('defaultDaeenId', 'fullName')
-        .lean(),
-      IndividualMeetingModel.find({
-        workspaceId: wId,
-        meetingDate: { $gte: new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000) }
-      })
-        .populate('personId', 'fullName')
-        .populate('primaryDaeenId', 'fullName')
-        .lean(),
-      IndividualMeetingModel.find({
-        workspaceId: wId,
-        meetingDate: { $gte: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000) }
-      }).lean(),
-      IndividualMeetingModel.find({
-        workspaceId: wId,
-        meetingDate: { $gte: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000) }
-      }).lean(),
-      DialogueForumModel.find({ workspaceId: wId }).populate('unitId', 'name').lean(),
-      GroupMeetingModel.find({ workspaceId: wId }).populate('unitId', 'name').lean(),
-      RmmModel.find({ workspaceId: wId, status: 'ACTIVE' }).populate('unitId', 'name').lean()
-    ]);
+    if (!ai) {
+      // Fallback if API key is not configured
+      return this.heuristicQueryFallback(workspaceId, question);
+    }
 
-    const maduList = people.filter((p: any) => p.currentStage === PersonStage.MADU);
-    const mdfList = people.filter((p: any) => p.currentStage === PersonStage.MDF);
-    const rabtakarList = people.filter((p: any) => p.currentStage === PersonStage.RABTAKAR || p.roles?.includes(OrganizationalResponsibility.RABTAKAR));
-    const daeenList = people.filter((p: any) => p.currentStage === PersonStage.DAEEN || p.roles?.includes(OrganizationalResponsibility.DAEEN));
+    // Step 1: Text-to-Aggregation Pipeline
+    const pipelinePrompt = `
+You are a senior MongoDB aggregation architect. Convert the user's natural language question into a STRICT, READ-ONLY MongoDB Aggregation Pipeline for the Dawati Management System.
 
-    const stateSummary = `
-Workspace Live Data Snapshot:
-- Total Units (${units.length}): ${units.map((u: any) => u.name).join(', ')}
-- Total People: ${people.length} (Madu: ${maduList.length}, MDF: ${mdfList.length}, Rabtakar: ${rabtakarList.length}, Daeen: ${daeenList.length})
-- Madueen Names: ${maduList.map((m: any) => `${m.fullName} (Unit: ${m.currentUnitId?.name || 'None'}, Rabtakar: ${m.primaryRabtakarId?.fullName || 'None'}, Status: ${m.operationalStatus || 'ACTIVE'})`).join('; ') || 'No Madu recorded yet'}
-- Meetings in last 3 days: ${meetings3d.length} (${meetings3d.map((m: any) => `${m.personId?.fullName} with ${m.primaryDaeenId?.fullName}`).join(', ') || 'No meetings'})
-- Meetings in last 7 days: ${meetings7d.length}
-- Meetings in last 30 days: ${meetings30d.length}
-- Total Dialogue Forums held: ${dfs.length}
-- Total Group Meetings held: ${gms.length}
-- Active RMMs: ${rmms.length} (${rmms.map((r: any) => `${r.unitId?.name}: target ${r.plannedMaduMeetings || 0} Madu`).join(', ')})
+Question: "${question}"
+
+Rules:
+1. Target Collection MUST be one of: ${Array.from(ALLOWED_COLLECTIONS).join(', ')}.
+2. The pipeline MUST be a valid JSON array of aggregation stages.
+3. The very first stage MUST be a $match stage that includes "workspaceId": "${workspaceId}".
+4. For date filtering (e.g. "today", "last 3 days", "last 7 days", "this month"), use the exact ISO date string anchors provided in the LIVE TEMPORAL context with "$gte" or "$lte".
+5. Use $lookup to join related collections when needed (e.g. joining "people" to get names for rabtakarId, personId, or primaryDaeenId, or joining "units" for unit names).
+6. NEVER include mutative operators ($out, $merge, $delete, $update, $set, $unset, $drop).
+7. Return JSON ONLY with this exact format:
+{
+  "collection": "individualmeetings",
+  "pipeline": [
+    { "$match": { "workspaceId": "${workspaceId}" } }
+  ]
+}
 `;
 
+    let generatedPipelineObj: { collection: string; pipeline: any[] };
+
     try {
-      const prompt = `
-Answer the user's question using the exact live workspace data below.
-${stateSummary}
+      const pipelineRes = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: pipelinePrompt,
+        config: {
+          systemInstruction: liveContext,
+          temperature: 0,
+          responseMimeType: 'application/json',
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              collection: {
+                type: Type.STRING,
+                enum: Array.from(ALLOWED_COLLECTIONS)
+              },
+              pipeline: {
+                type: Type.ARRAY,
+                items: { type: Type.OBJECT }
+              }
+            },
+            required: ['collection', 'pipeline']
+          }
+        }
+      });
+
+      generatedPipelineObj = JSON.parse(pipelineRes.text || '{}');
+    } catch (err: any) {
+      console.warn('Gemini pipeline generation failed, falling back to heuristic:', err.message);
+      return this.heuristicQueryFallback(workspaceId, question);
+    }
+
+    const { collection, pipeline } = generatedPipelineObj;
+
+    // Step 2: Strict Read-Only Security Inspection
+    if (!collection || !ALLOWED_COLLECTIONS.has(collection.toLowerCase().trim())) {
+      throw new AppError(`Invalid or unauthorized collection: "${collection}"`, 403);
+    }
+
+    if (!Array.isArray(pipeline)) {
+      throw new AppError('Generated pipeline must be a valid JSON array', 400);
+    }
+
+    const pipelineStr = JSON.stringify(pipeline);
+    for (const forbidden of FORBIDDEN_OPERATORS) {
+      if (pipelineStr.includes(forbidden)) {
+        throw new AppError(`Mutative or forbidden operator detected in pipeline: ${forbidden}`, 403);
+      }
+    }
+
+    // Step 3: Sanitize and enforce workspaceId + BSON conversions
+    const sanitizedPipeline = this.sanitizePipeline(pipeline, wId);
+
+    // Step 4: Execute database aggregation
+    let rawResult: any[] = [];
+    try {
+      const db = mongoose.connection.db;
+      if (!db) {
+        throw new AppError('Database connection is not available', 500);
+      }
+      rawResult = await db.collection(collection.toLowerCase().trim()).aggregate(sanitizedPipeline).toArray();
+    } catch (dbErr: any) {
+      console.error('Aggregation execution failed:', dbErr.message);
+      throw new AppError(`Failed to execute MongoDB aggregation: ${dbErr.message}`, 500);
+    }
+
+    // Step 5: Grounded Response Generation
+    const groundedPrompt = `
+Answer the user's question using ONLY the exact database output provided below.
+Do not extrapolate or add outside facts.
+If the database returns empty or zero results, clearly state that no matching records were found.
+Respond naturally and politely in the language used by the user:
+- If the user asked in Roman Urdu (e.g. "mujy sab maudeen ki list chahiya", "pichlay 3 dinu main kitni meetings hoi"), respond in fluent Roman Urdu.
+- If the user asked in Urdu, respond in Urdu script.
+- If the user asked in English, respond in English.
 
 User's Question: "${question}"
 
-Instructions:
-1. If the user asks in Roman Urdu (e.g. "mujy sab maudeen ki list chahiya", "pichlay 3 dinu main kitni meetings hoi"), respond naturally and politely in Roman Urdu!
-2. If the user asks in Urdu, respond in Urdu script.
-3. If the user asks in English, respond in English.
-4. Give exact, direct answers, and provide lists with formatting (bullet points or tables) when requested.
+Target Collection Queried: "${collection}"
+Database Aggregation Result (Count: ${rawResult.length}):
+${JSON.stringify(rawResult.slice(0, 50), null, 2)}
 `;
 
-      const responseText = await this.callGemini(prompt, false);
-      return {
-        answer: responseText,
-        dataContext: {
-          totalUnits: units.length,
-          totalPeople: people.length,
-          totalMeetings3d: meetings3d.length,
-          totalMeetings7d: meetings7d.length
+    let finalAnswer = '';
+    try {
+      const answerRes = await ai.models.generateContent({
+        model: 'gemini-2.5-flash',
+        contents: groundedPrompt,
+        config: {
+          systemInstruction: liveContext,
+          temperature: 0
         }
-      };
-    } catch (err: any) {
-      console.warn('Gemini Q&A fallback activated:', err.message);
-      // Smart Rule-based responses for common Roman Urdu / English questions
-      return this.heuristicAnswer(question, {
-        units,
-        maduList,
-        mdfList,
-        rabtakarList,
-        daeenList,
-        meetings3d,
-        meetings7d,
-        meetings30d
       });
+      finalAnswer = answerRes.text || 'No response generated.';
+    } catch (err: any) {
+      finalAnswer = `Database query returned ${rawResult.length} record(s): ${JSON.stringify(rawResult.slice(0, 10))}`;
     }
+
+    return {
+      answer: finalAnswer,
+      collection,
+      pipeline: sanitizedPipeline,
+      rawResultCount: rawResult.length,
+      rawResult: rawResult.slice(0, 25),
+      question
+    };
   }
 
-  private static heuristicAnswer(question: string, data: any) {
+  /**
+   * Recursively sanitize pipeline stages:
+   * - Enforce workspaceId at stage 0
+   * - Convert 24-char hex strings in match clauses to ObjectId
+   * - Convert ISO date strings to real Date instances for proper BSON date comparison
+   */
+  private static sanitizePipeline(pipeline: any[], workspaceId: Types.ObjectId): any[] {
+    const clean = pipeline.map((stage) => this.deepConvertTypes(stage));
+
+    // Enforce workspaceId in the very first stage
+    if (clean.length === 0 || !clean[0].$match) {
+      clean.unshift({ $match: { workspaceId } });
+    } else {
+      clean[0].$match.workspaceId = workspaceId;
+    }
+
+    return clean;
+  }
+
+  private static deepConvertTypes(obj: any): any {
+    if (obj === null || obj === undefined) return obj;
+
+    if (Array.isArray(obj)) {
+      return obj.map((item) => this.deepConvertTypes(item));
+    }
+
+    if (typeof obj === 'object') {
+      const res: any = {};
+      for (const [k, v] of Object.entries(obj)) {
+        if (typeof v === 'string') {
+          // Check for ISO Date
+          if (/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}/.test(v)) {
+            res[k] = new Date(v);
+          }
+          // Check for ObjectId (24 hex characters)
+          else if (/^[0-9a-fA-F]{24}$/.test(v) && (k.endsWith('Id') || k === '_id' || k === 'workspaceId')) {
+            res[k] = new Types.ObjectId(v);
+          } else {
+            res[k] = v;
+          }
+        } else {
+          res[k] = this.deepConvertTypes(v);
+        }
+      }
+      return res;
+    }
+
+    return obj;
+  }
+
+  /**
+   * Fallback rule-based parser when Gemini API key is absent
+   */
+  private static async heuristicParser(workspaceId: string, text: string) {
+    const wId = new Types.ObjectId(workspaceId);
+    const units = await UnitModel.find({ workspaceId: wId, isActive: true }).select('name').lean();
+    const defaultUnitName = units[0]?.name || 'Default Unit';
+
+    const people: any[] = [];
+    const meetings: any[] = [];
+    const rmm: any[] = [];
+    const dialogueForums: any[] = [];
+
+    const lines = text.split('\n').map((l) => l.trim()).filter(Boolean);
+
+    for (const line of lines) {
+      const lower = line.toLowerCase();
+
+      // Check for RMM
+      if (lower.includes('rmm') || lower.includes('weekly') || lower.includes('target')) {
+        const maduMatch = line.match(/(\d+)\s*madu/i);
+        const mdfMatch = line.match(/(\d+)\s*mdf/i);
+        rmm.push({
+          unitName: defaultUnitName,
+          rmmDate: new Date().toISOString().split('T')[0],
+          weekStartDate: new Date().toISOString().split('T')[0],
+          weekEndDate: new Date(Date.now() + 7 * 86400000).toISOString().split('T')[0],
+          plannedMaduMeetings: maduMatch ? parseInt(maduMatch[1], 10) : 5,
+          plannedMdfMeetings: mdfMatch ? parseInt(mdfMatch[1], 10) : 2,
+          comments: line
+        });
+      }
+      // Check for Dialogue Forum
+      else if (lower.includes('dialogue') || lower.includes('df') || lower.includes('forum')) {
+        dialogueForums.push({
+          unitName: defaultUnitName,
+          date: new Date().toISOString().split('T')[0],
+          topic: line.replace(/(dialogue forum|df|forum)/i, '').trim() || 'Dialogue Forum Session',
+          comments: line,
+          attendeeNames: []
+        });
+      }
+      // Check for Meeting
+      else if (lower.includes('meeting') || lower.includes('mulaqat') || lower.includes('guftagu')) {
+        const words = line.split(/[ ,:]+/).filter((w) => w.length > 2);
+        meetings.push({
+          personName: words[1] || 'New Contact',
+          unitName: defaultUnitName,
+          comments: line,
+          meetingDate: new Date().toISOString().split('T')[0]
+        });
+      }
+      // Check for Person
+      else if (lower.includes('madu') || lower.includes('contact') || lower.includes('naya')) {
+        const cleaned = line.replace(/^(naya|new|madu|contact)[: -]*/i, '').trim();
+        const parts = cleaned.split(/[,;-]+/);
+        people.push({
+          fullName: parts[0]?.trim() || 'New Contact',
+          currentStage: PersonStage.MADU,
+          operationalStatus: OperationalStatus.ACTIVE,
+          unitName: defaultUnitName,
+          notes: line
+        });
+      }
+    }
+
+    return {
+      summary: `Heuristic extracted: ${people.length} people, ${meetings.length} meetings, ${rmm.length} RMM, ${dialogueForums.length} DFs`,
+      people,
+      meetings,
+      rmm,
+      dialogueForums
+    };
+  }
+
+  /**
+   * Fallback Q&A when Gemini API key is absent
+   */
+  private static async heuristicQueryFallback(workspaceId: string, question: string) {
+    const wId = new Types.ObjectId(workspaceId);
+    const now = new Date();
+    const threeDaysAgo = new Date(now.getTime() - 3 * 24 * 60 * 60 * 1000);
+    const sevenDaysAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+
+    const [people, meetings3d, meetings7d, units] = await Promise.all([
+      PersonModel.find({ workspaceId: wId, isArchived: false }).populate('currentUnitId', 'name').lean(),
+      IndividualMeetingModel.find({ workspaceId: wId, meetingDate: { $gte: threeDaysAgo } }).populate('personId', 'fullName').populate('primaryDaeenId', 'fullName').lean(),
+      IndividualMeetingModel.find({ workspaceId: wId, meetingDate: { $gte: sevenDaysAgo } }).lean(),
+      UnitModel.find({ workspaceId: wId, isActive: true }).select('name').lean()
+    ]);
+
+    const maduList = people.filter((p: any) => p.currentStage === PersonStage.MADU);
     const q = question.toLowerCase();
 
-    if (q.includes('madu') || q.includes('maudeen') || q.includes('madueen')) {
-      const list = data.maduList.map((m: any, i: number) =>
-        `${i + 1}. **${m.fullName}** — Unit: ${m.currentUnitId?.name || 'N/A'}, Rabtakar: ${m.primaryRabtakarId?.fullName || 'N/A'}, Status: ${m.operationalStatus || 'ACTIVE'}`
+    if (q.includes('madu') || q.includes('maudeen') || q.includes('madueen') || q.includes('list')) {
+      const formatted = maduList.map((m: any, idx: number) =>
+        `${idx + 1}. **${m.fullName}** — Unit: ${m.currentUnitId?.name || 'N/A'}, Status: ${m.operationalStatus || 'ACTIVE'}`
       ).join('\n');
 
       return {
-        answer: `Aap ke sector mein total **${data.maduList.length}** Madueen darj hain:\n\n${list || 'Abhi tak koi Madu darj nahi kiya gaya.'}`,
-        dataContext: { count: data.maduList.length }
+        answer: `Aap ke sector mein total **${maduList.length}** Madueen darj hain:\n\n${formatted || 'Abhi tak koi Madu darj nahi kiya gaya.'}`,
+        collection: 'people',
+        pipeline: [{ $match: { workspaceId: wId, currentStage: 'MADU', isArchived: false } }],
+        rawResultCount: maduList.length,
+        rawResult: maduList.slice(0, 10),
+        question
       };
     }
 
     if (q.includes('3 din') || q.includes('3 days') || q.includes('teen din')) {
       return {
-        answer: `Pichlay 3 dinon mein total **${data.meetings3d.length}** Individual Meetings (IM) munaqid hui hain.`,
-        dataContext: { count: data.meetings3d.length }
+        answer: `Pichlay 3 dinon mein total **${meetings3d.length}** Individual Meetings (IM) munaqid hui hain.`,
+        collection: 'individualmeetings',
+        pipeline: [{ $match: { workspaceId: wId, meetingDate: { $gte: threeDaysAgo } } }],
+        rawResultCount: meetings3d.length,
+        rawResult: meetings3d,
+        question
       };
     }
 
-    if (q.includes('7 din') || q.includes('hafte') || q.includes('week') || q.includes('sat din')) {
+    if (q.includes('7 din') || q.includes('week') || q.includes('hafte') || q.includes('sat din')) {
       return {
-        answer: `Pichlay 7 dinon (hafte) mein total **${data.meetings7d.length}** Individual Meetings munaqid hui hain.`,
-        dataContext: { count: data.meetings7d.length }
-      };
-    }
-
-    if (q.includes('daeen') || q.includes('dae')) {
-      const list = data.daeenList.map((d: any, i: number) => `${i + 1}. **${d.fullName}** (${d.internalId})`).join('\n');
-      return {
-        answer: `Sector mein total **${data.daeenList.length}** Daeen resources hain:\n\n${list || 'Koi Daeen mojood nahi.'}`,
-        dataContext: { count: data.daeenList.length }
-      };
-    }
-
-    if (q.includes('rabtakar') || q.includes('rbt')) {
-      const list = data.rabtakarList.map((r: any, i: number) => `${i + 1}. **${r.fullName}** (${r.currentUnitId?.name || 'All Units'})`).join('\n');
-      return {
-        answer: `Sector mein total **${data.rabtakarList.length}** Rabtakar darj hain:\n\n${list || 'Koi Rabtakar mojood nahi.'}`,
-        dataContext: { count: data.rabtakarList.length }
+        answer: `Pichlay 7 dinon (is hafte) mein total **${meetings7d.length}** Individual Meetings munaqid hui hain.`,
+        collection: 'individualmeetings',
+        pipeline: [{ $match: { workspaceId: wId, meetingDate: { $gte: sevenDaysAgo } } }],
+        rawResultCount: meetings7d.length,
+        rawResult: meetings7d,
+        question
       };
     }
 
     return {
-      answer: `Aap ka sawal mil gaya hai. Live workspace snapshot:\n- Total Units: ${data.units.length}\n- Total Madu: ${data.maduList.length}\n- Total MDF: ${data.mdfList.length}\n- Total Rabtakar: ${data.rabtakarList.length}\n- Total Daeen: ${data.daeenList.length}\n- Pichlay 3 dinon mein meetings: ${data.meetings3d.length}\n- Pichlay 7 dinon mein meetings: ${data.meetings7d.length}`,
-      dataContext: {}
+      answer: `Workspace Snapshot:\n- Total Units: ${units.length}\n- Total People: ${people.length} (Madu: ${maduList.length})\n- Meetings in last 7 days: ${meetings7d.length}`,
+      collection: 'people',
+      pipeline: [{ $match: { workspaceId: wId } }],
+      rawResultCount: people.length,
+      rawResult: people.slice(0, 5),
+      question
     };
   }
 }
