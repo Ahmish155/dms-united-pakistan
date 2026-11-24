@@ -16,9 +16,15 @@ import {
   Trash2,
   Save,
   X,
-  AlertTriangle
+  AlertTriangle,
+  Users,
+  MessageSquare,
+  PauseCircle,
+  PlayCircle,
+  UserMinus,
+  CheckCircle2
 } from 'lucide-react';
-import { ActivityStatus, PersonStage, OrganizationalResponsibility } from '@dms/shared';
+import { ActivityStatus, PersonStage, OrganizationalResponsibility, OperationalStatus } from '@dms/shared';
 
 export const PersonProfilePage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -54,6 +60,7 @@ export const PersonProfilePage: React.FC = () => {
         fullName: res.person.fullName,
         contactNumber: res.person.contactNumber || '',
         currentStage: res.person.currentStage,
+        operationalStatus: res.person.operationalStatus || OperationalStatus.ACTIVE,
         currentUnitId: res.person.currentUnitId?._id || '',
         assignedUnitIds: res.person.assignedUnitIds?.map((u: any) => u._id || u) || [],
         roles: res.person.roles || [],
@@ -79,6 +86,7 @@ export const PersonProfilePage: React.FC = () => {
         fullName: editForm.fullName,
         contactNumber: editForm.contactNumber || undefined,
         currentStage: editForm.currentStage,
+        operationalStatus: editForm.operationalStatus,
         roles: editForm.roles,
         primaryRabtakarId: editForm.primaryRabtakarId || undefined,
         defaultDaeenId: editForm.defaultDaeenId || undefined,
@@ -97,6 +105,15 @@ export const PersonProfilePage: React.FC = () => {
       alert(err.message || 'Failed to save changes');
     } finally {
       setSaving(false);
+    }
+  };
+
+  const handleQuickStatusChange = async (newStatus: OperationalStatus) => {
+    try {
+      await ApiService.patch(`/people/${id}`, { operationalStatus: newStatus });
+      await fetchProfile();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update status');
     }
   };
 
@@ -149,8 +166,12 @@ export const PersonProfilePage: React.FC = () => {
     );
   }
 
-  const { person, activity, meetings, promotions, transfers, associatedMadu } = data;
+  const { person, activity, meetings, meetingsAsDaeen, meetingsAsRabtakar, dfAttendanceHistory, promotions, transfers, associatedMadu, daeenAssociatedMadu } = data;
   const isActive = activity?.status === ActivityStatus.ACTIVE;
+  const isDaeen = person.currentStage === PersonStage.DAEEN || person.roles?.includes(OrganizationalResponsibility.DAEEN);
+  const isRabtakar = person.currentStage === PersonStage.RABTAKAR || person.roles?.includes(OrganizationalResponsibility.RABTAKAR);
+  const isMdf = person.currentStage === PersonStage.MDF;
+  const isMadu = person.currentStage === PersonStage.MADU;
 
   const rabtakarList = allPeople.filter(
     (p) => p.currentStage === PersonStage.RABTAKAR || p.roles?.includes(OrganizationalResponsibility.RABTAKAR)
@@ -174,11 +195,11 @@ export const PersonProfilePage: React.FC = () => {
       <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-4">
         <div className="flex flex-col sm:flex-row sm:items-start sm:justify-between gap-3">
           <div>
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-2 flex-wrap">
               <h1 className="text-xl font-bold tracking-tight text-typography-main">
                 {editing ? (
                   <input
-                    className="input-field text-xl font-bold"
+                    className="input-field text-xl font-bold py-1"
                     value={editForm.fullName}
                     onChange={(e) => setEditForm((p: any) => ({ ...p, fullName: e.target.value }))}
                   />
@@ -186,16 +207,35 @@ export const PersonProfilePage: React.FC = () => {
                   person.fullName
                 )}
               </h1>
+
+              {/* Dynamic Status Badges */}
               <span className={isActive ? 'badge-active' : 'badge-inactive'}>
                 {isActive ? 'Active' : 'Inactive'}
               </span>
+
+              {person.operationalStatus && (
+                <span
+                  className={`rounded-full px-2.5 py-0.5 text-[11px] font-bold ${
+                    person.operationalStatus === OperationalStatus.PIPELINE
+                      ? 'bg-blue-100 text-blue-700'
+                      : person.operationalStatus === OperationalStatus.FREEZED
+                      ? 'bg-cyan-100 text-cyan-800'
+                      : person.operationalStatus === OperationalStatus.DROPPED
+                      ? 'bg-gray-200 text-gray-700'
+                      : 'bg-emerald-100 text-emerald-800'
+                  }`}
+                >
+                  {person.operationalStatus}
+                </span>
+              )}
             </div>
-            <div className="flex flex-wrap items-center gap-3 mt-1 text-xs text-typography-secondary">
-              <span className="font-mono">{person.internalId}</span>
+
+            <div className="flex flex-wrap items-center gap-3 mt-1.5 text-xs text-typography-secondary">
+              <span className="font-mono font-semibold">{person.internalId}</span>
               <span>•</span>
               <span className="flex items-center gap-1">
                 <MapPin className="h-3.5 w-3.5 text-brand-red" />
-                {person.currentUnitId?.name || 'No Unit'}
+                {isDaeen ? 'Sector Resource (All Units)' : person.currentUnitId?.name || 'No Unit'}
               </span>
               {person.contactNumber && !editing && (
                 <>
@@ -210,7 +250,7 @@ export const PersonProfilePage: React.FC = () => {
           </div>
 
           {/* Action Buttons */}
-          <div className="flex gap-2 shrink-0">
+          <div className="flex flex-wrap gap-2 shrink-0">
             {editing ? (
               <>
                 <button
@@ -231,12 +271,58 @@ export const PersonProfilePage: React.FC = () => {
               </>
             ) : (
               <>
+                {/* Quick Lifecycle Controls for Madu/MDF */}
+                {(isMadu || isMdf) && (
+                  <div className="flex gap-1.5">
+                    {person.operationalStatus === OperationalStatus.PIPELINE && (
+                      <button
+                        onClick={() => handleQuickStatusChange(OperationalStatus.ACTIVE)}
+                        className="rounded-lg bg-emerald-600 text-white text-xs py-1.5 px-2.5 font-semibold hover:bg-emerald-700 flex items-center gap-1"
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" /> Start / Active
+                      </button>
+                    )}
+                    {person.operationalStatus !== OperationalStatus.FREEZED && (
+                      <button
+                        onClick={() => handleQuickStatusChange(OperationalStatus.FREEZED)}
+                        className="rounded-lg border border-cyan-300 text-cyan-800 bg-cyan-50 text-xs py-1.5 px-2.5 font-medium hover:bg-cyan-100 flex items-center gap-1"
+                      >
+                        <PauseCircle className="h-3.5 w-3.5" /> Freeze
+                      </button>
+                    )}
+                    {person.operationalStatus === OperationalStatus.FREEZED && (
+                      <button
+                        onClick={() => handleQuickStatusChange(OperationalStatus.ACTIVE)}
+                        className="rounded-lg border border-emerald-300 text-emerald-800 bg-emerald-50 text-xs py-1.5 px-2.5 font-medium hover:bg-emerald-100 flex items-center gap-1"
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" /> Unfreeze
+                      </button>
+                    )}
+                    {person.operationalStatus !== OperationalStatus.DROPPED && (
+                      <button
+                        onClick={() => handleQuickStatusChange(OperationalStatus.DROPPED)}
+                        className="rounded-lg border border-gray-300 text-gray-700 bg-gray-50 text-xs py-1.5 px-2.5 font-medium hover:bg-gray-100 flex items-center gap-1"
+                      >
+                        <UserMinus className="h-3.5 w-3.5" /> Drop
+                      </button>
+                    )}
+                    {person.operationalStatus === OperationalStatus.DROPPED && (
+                      <button
+                        onClick={() => handleQuickStatusChange(OperationalStatus.ACTIVE)}
+                        className="rounded-lg border border-emerald-300 text-emerald-800 bg-emerald-50 text-xs py-1.5 px-2.5 font-medium hover:bg-emerald-100 flex items-center gap-1"
+                      >
+                        <PlayCircle className="h-3.5 w-3.5" /> Reactivate
+                      </button>
+                    )}
+                  </div>
+                )}
+
                 <button
                   onClick={() => setEditing(true)}
                   className="btn-secondary text-xs py-1.5 px-3 gap-1.5"
                 >
                   <Edit2 className="h-3.5 w-3.5" />
-                  Edit
+                  Edit Profile
                 </button>
                 <button
                   onClick={() => setDeleteConfirm(true)}
@@ -250,11 +336,10 @@ export const PersonProfilePage: React.FC = () => {
           </div>
         </div>
 
-        {/* Stage & Roles — view or edit */}
+        {/* Edit Form Body */}
         {editing ? (
           <div className="space-y-4 border-t border-surface-border pt-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              {/* Contact */}
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
               <div>
                 <label className="block text-xs font-semibold text-typography-secondary mb-1">Contact Number</label>
                 <input
@@ -265,7 +350,6 @@ export const PersonProfilePage: React.FC = () => {
                 />
               </div>
 
-              {/* Stage */}
               <div>
                 <label className="block text-xs font-semibold text-typography-secondary mb-1">Stage</label>
                 <select
@@ -280,7 +364,20 @@ export const PersonProfilePage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Primary Unit — hidden for Daeen */}
+              <div>
+                <label className="block text-xs font-semibold text-typography-secondary mb-1">Operational Status</label>
+                <select
+                  className="input-field text-xs"
+                  value={editForm.operationalStatus}
+                  onChange={(e) => setEditForm((p: any) => ({ ...p, operationalStatus: e.target.value }))}
+                >
+                  <option value={OperationalStatus.ACTIVE}>Active</option>
+                  <option value={OperationalStatus.PIPELINE}>Pipeline (Not scheduled)</option>
+                  <option value={OperationalStatus.FREEZED}>Freezed</option>
+                  <option value={OperationalStatus.DROPPED}>Dropped</option>
+                </select>
+              </div>
+
               {editForm.currentStage !== PersonStage.DAEEN && (
                 <div>
                   <label className="block text-xs font-semibold text-typography-secondary mb-1">Primary Unit</label>
@@ -297,7 +394,6 @@ export const PersonProfilePage: React.FC = () => {
                 </div>
               )}
 
-              {/* Rabtakar */}
               <div>
                 <label className="block text-xs font-semibold text-typography-secondary mb-1">Primary Rabtakar</label>
                 <select
@@ -312,7 +408,6 @@ export const PersonProfilePage: React.FC = () => {
                 </select>
               </div>
 
-              {/* Daeen */}
               <div>
                 <label className="block text-xs font-semibold text-typography-secondary mb-1">Default Daeen</label>
                 <select
@@ -396,27 +491,124 @@ export const PersonProfilePage: React.FC = () => {
           </div>
         )}
 
-        {/* Quick Metrics */}
+        {/* ROLE-SPECIFIC INNER DASHBOARD / QUICK METRICS */}
         {!editing && (
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 border-t border-surface-border pt-4 text-xs">
-            <div>
-              <span className="text-typography-secondary block">Total Completed IMs</span>
-              <span className="text-lg font-bold text-typography-main">{meetings?.length || 0}</span>
-            </div>
-            <div>
-              <span className="text-typography-secondary block">Days Since Last IM</span>
-              <span className="text-lg font-bold text-typography-main">
-                {activity?.daysSinceLastMeeting !== null ? `${activity?.daysSinceLastMeeting}d` : '—'}
-              </span>
-            </div>
-            <div>
-              <span className="text-typography-secondary block">Promotions</span>
-              <span className="text-lg font-bold text-typography-main">{promotions?.length || 0}</span>
-            </div>
-            <div>
-              <span className="text-typography-secondary block">Unit Transfers</span>
-              <span className="text-lg font-bold text-typography-main">{transfers?.length || 0}</span>
-            </div>
+            {/* If DAEEN */}
+            {isDaeen && (
+              <>
+                <div>
+                  <span className="text-typography-secondary block">Total Meetings Conducted</span>
+                  <span className="text-xl font-black text-brand-red">
+                    {activity?.totalMeetingsAsDaeen || meetingsAsDaeen?.length || 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Last Meeting Conducted</span>
+                  <span className="text-xl font-bold text-typography-main">
+                    {activity?.lastMeetingDate ? new Date(activity.lastMeetingDate).toLocaleDateString() : 'None'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Days Since Last Meeting</span>
+                  <span className="text-xl font-bold text-typography-main">
+                    {activity?.daysSinceLastMeeting !== null ? `${activity.daysSinceLastMeeting}d` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Associated Contacts</span>
+                  <span className="text-xl font-bold text-typography-main">
+                    {daeenAssociatedMadu?.length || 0}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* If RABTAKAR */}
+            {isRabtakar && (
+              <>
+                <div>
+                  <span className="text-typography-secondary block">Total Meetings as Rabtakar</span>
+                  <span className="text-xl font-black text-brand-red">
+                    {activity?.totalMeetingsAsRabtakar || meetingsAsRabtakar?.length || 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Total Madu Provided</span>
+                  <span className="text-xl font-bold text-typography-main">
+                    {associatedMadu?.length || 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Active Madu</span>
+                  <span className="text-xl font-bold text-status-success">
+                    {associatedMadu?.filter((m: any) => m.operationalStatus !== OperationalStatus.FREEZED && m.operationalStatus !== OperationalStatus.DROPPED && m.operationalStatus !== OperationalStatus.PIPELINE).length || 0}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Future Pipeline</span>
+                  <span className="text-xl font-bold text-blue-600">
+                    {associatedMadu?.filter((m: any) => m.operationalStatus === OperationalStatus.PIPELINE).length || 0}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* If MADU */}
+            {isMadu && (
+              <>
+                <div>
+                  <span className="text-typography-secondary block">Total Completed IMs</span>
+                  <span className="text-xl font-black text-brand-red">{meetings?.length || 0}</span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Last IM Meeting Date</span>
+                  <span className="text-base font-bold text-typography-main">
+                    {activity?.lastImDate ? new Date(activity.lastImDate).toLocaleDateString() : 'Never'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Days Since Last IM</span>
+                  <span className="text-xl font-bold text-typography-main">
+                    {activity?.daysSinceLastMeeting !== null ? `${activity.daysSinceLastMeeting}d` : '—'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Lifecycle Status</span>
+                  <span className="text-base font-bold text-typography-main">
+                    {person.operationalStatus || 'ACTIVE'}
+                  </span>
+                </div>
+              </>
+            )}
+
+            {/* If MDF */}
+            {isMdf && (
+              <>
+                <div>
+                  <span className="text-typography-secondary block">Total Completed IMs</span>
+                  <span className="text-xl font-black text-brand-red">{meetings?.length || 0}</span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Last IM Date</span>
+                  <span className="text-base font-bold text-typography-main">
+                    {activity?.lastImDate ? new Date(activity.lastImDate).toLocaleDateString() : 'Never'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">Last Attended DF Date</span>
+                  <span className="text-base font-bold text-blue-600">
+                    {activity?.lastAttendedDfDate ? new Date(activity.lastAttendedDfDate).toLocaleDateString() : 'None'}
+                  </span>
+                </div>
+                <div>
+                  <span className="text-typography-secondary block">DFs Attended</span>
+                  <span className="text-xl font-bold text-typography-main">
+                    {dfAttendanceHistory?.length || 0}
+                  </span>
+                </div>
+              </>
+            )}
           </div>
         )}
 
@@ -468,6 +660,233 @@ export const PersonProfilePage: React.FC = () => {
         </div>
       )}
 
+      {/* DAEEN PORTFOLIO: ASSOCIATED MADU & MEETINGS CONDUCTED */}
+      {isDaeen && (
+        <div className="space-y-4">
+          {/* Associated Madu / Contacts */}
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-typography-main flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-red" />
+                <span>Madu & MDF Contacts Associated with Daeen</span>
+              </h2>
+              <span className="text-xs text-typography-secondary">
+                {daeenAssociatedMadu?.length || 0} contacts
+              </span>
+            </div>
+
+            {!daeenAssociatedMadu || daeenAssociatedMadu.length === 0 ? (
+              <p className="text-xs text-typography-secondary italic py-2">
+                No contacts currently assigned to this Daeen as default.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
+                    <tr>
+                      <th className="p-2.5">Name</th>
+                      <th className="p-2.5">Stage</th>
+                      <th className="p-2.5">Unit</th>
+                      <th className="p-2.5">Rabtakar</th>
+                      <th className="p-2.5">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-border">
+                    {daeenAssociatedMadu.map((m: any) => (
+                      <tr key={m._id} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-bold">
+                          <Link to={`/people/${m._id}`} className="hover:text-brand-red">
+                            {m.fullName}
+                          </Link>
+                        </td>
+                        <td className="p-2.5">
+                          <span className="rounded bg-brand-red-light px-1.5 py-0.5 text-[10px] font-semibold text-brand-red">
+                            {m.currentStage}
+                          </span>
+                        </td>
+                        <td className="p-2.5">{m.currentUnitId?.name || 'N/A'}</td>
+                        <td className="p-2.5 text-typography-secondary">{m.primaryRabtakarId?.fullName || '—'}</td>
+                        <td className="p-2.5">
+                          <span className="font-semibold text-[10px]">{m.operationalStatus || 'ACTIVE'}</span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          {/* Meetings Conducted as Daeen */}
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-typography-main flex items-center gap-2">
+                <CalendarCheck className="h-4 w-4 text-brand-red" />
+                <span>Meetings Conducted as Daeen ({meetingsAsDaeen?.length || 0})</span>
+              </h2>
+            </div>
+
+            {!meetingsAsDaeen || meetingsAsDaeen.length === 0 ? (
+              <p className="text-xs text-typography-secondary italic py-2">
+                No meetings conducted as primary Daeen yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
+                    <tr>
+                      <th className="p-2.5">Date</th>
+                      <th className="p-2.5">Person Met</th>
+                      <th className="p-2.5">Stage</th>
+                      <th className="p-2.5">Unit</th>
+                      <th className="p-2.5">Rabtakar</th>
+                      <th className="p-2.5">Comments</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-border">
+                    {meetingsAsDaeen.map((m: any) => (
+                      <tr key={m._id} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-medium whitespace-nowrap">
+                          {new Date(m.meetingDate).toLocaleDateString()}
+                        </td>
+                        <td className="p-2.5 font-bold">
+                          <Link to={`/people/${m.personId?._id}`} className="hover:text-brand-red">
+                            {m.personId?.fullName}
+                          </Link>
+                        </td>
+                        <td className="p-2.5">{m.personId?.currentStage}</td>
+                        <td className="p-2.5">{m.unitId?.name}</td>
+                        <td className="p-2.5 text-typography-secondary">{m.rabtakarId?.fullName || '—'}</td>
+                        <td className="p-2.5 text-typography-secondary max-w-xs truncate">{m.comments || '—'}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* RABTAKAR PORTFOLIO: MADU PROVIDED & FUTURE PIPELINE */}
+      {isRabtakar && (
+        <div className="space-y-4">
+          <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-bold text-typography-main flex items-center gap-2">
+                <Users className="h-4 w-4 text-brand-red" />
+                <span>Madu & MDF Contacts Provided by Rabtakar ({associatedMadu?.length || 0})</span>
+              </h2>
+            </div>
+
+            {!associatedMadu || associatedMadu.length === 0 ? (
+              <p className="text-xs text-typography-secondary italic py-2">
+                No Madu contacts provided by this Rabtakar yet.
+              </p>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs">
+                  <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
+                    <tr>
+                      <th className="p-2.5">Name</th>
+                      <th className="p-2.5">Stage</th>
+                      <th className="p-2.5">Unit</th>
+                      <th className="p-2.5">Daeen</th>
+                      <th className="p-2.5">Lifecycle Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-surface-border">
+                    {associatedMadu.map((m: any) => (
+                      <tr key={m._id} className="hover:bg-gray-50">
+                        <td className="p-2.5 font-bold">
+                          <Link to={`/people/${m._id}`} className="hover:text-brand-red">
+                            {m.fullName}
+                          </Link>
+                        </td>
+                        <td className="p-2.5">
+                          <span className="rounded bg-brand-red-light px-1.5 py-0.5 text-[10px] font-semibold text-brand-red">
+                            {m.currentStage}
+                          </span>
+                        </td>
+                        <td className="p-2.5">{m.currentUnitId?.name || 'N/A'}</td>
+                        <td className="p-2.5 text-typography-secondary">{m.defaultDaeenId?.fullName || 'Not Assigned'}</td>
+                        <td className="p-2.5">
+                          <span
+                            className={`rounded px-1.5 py-0.5 text-[10px] font-bold ${
+                              m.operationalStatus === OperationalStatus.PIPELINE
+                                ? 'bg-blue-100 text-blue-700'
+                                : m.operationalStatus === OperationalStatus.FREEZED
+                                ? 'bg-cyan-100 text-cyan-800'
+                                : m.operationalStatus === OperationalStatus.DROPPED
+                                ? 'bg-gray-200 text-gray-700'
+                                : 'bg-green-100 text-status-success'
+                            }`}
+                          >
+                            {m.operationalStatus || 'ACTIVE'}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* MDF SPECIFIC: DIALOGUE FORUM ATTENDANCE HISTORY */}
+      {isMdf && (
+        <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
+          <div className="flex items-center justify-between">
+            <h2 className="text-sm font-bold text-typography-main flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-blue-600" />
+              <span>Dialogue Forum (DF) Attendance History</span>
+            </h2>
+            <span className="text-xs text-typography-secondary">
+              Last attended: {activity?.lastAttendedDfDate ? new Date(activity.lastAttendedDfDate).toLocaleDateString() : 'Never'}
+            </span>
+          </div>
+
+          {!dfAttendanceHistory || dfAttendanceHistory.length === 0 ? (
+            <p className="text-xs text-typography-secondary italic py-2">
+              No Dialogue Forum attendance recorded for this contact yet.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="w-full text-left text-xs">
+                <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
+                  <tr>
+                    <th className="p-2.5">Date</th>
+                    <th className="p-2.5">Topic</th>
+                    <th className="p-2.5">Unit</th>
+                    <th className="p-2.5">Mentor</th>
+                    <th className="p-2.5">Status</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-surface-border">
+                  {dfAttendanceHistory.map((a: any) => (
+                    <tr key={a._id} className="hover:bg-gray-50">
+                      <td className="p-2.5 font-medium whitespace-nowrap">
+                        {a.dfId?.date ? new Date(a.dfId.date).toLocaleDateString() : '—'}
+                      </td>
+                      <td className="p-2.5 font-bold">{a.dfId?.topic || 'Dialogue Forum'}</td>
+                      <td className="p-2.5">{a.dfId?.unitId?.name || 'N/A'}</td>
+                      <td className="p-2.5 text-typography-secondary">{a.dfId?.mentorId?.name || 'N/A'}</td>
+                      <td className="p-2.5">
+                        <span className="rounded bg-green-100 text-status-success px-1.5 py-0.5 text-[10px] font-bold">
+                          {a.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </div>
+      )}
+
       {/* Individual Meeting History */}
       <div className="rounded-xl border border-surface-border bg-white p-5 shadow-sm space-y-3">
         <div className="flex items-center justify-between">
@@ -488,9 +907,9 @@ export const PersonProfilePage: React.FC = () => {
               <thead className="bg-surface-secondary text-typography-secondary border-b border-surface-border">
                 <tr>
                   <th className="p-2.5">Date</th>
-                  <th className="p-2.5">Meeting #</th>
-                  <th className="p-2.5">Unit (At Meeting)</th>
+                  <th className="p-2.5">Unit</th>
                   <th className="p-2.5">Primary Daeen</th>
+                  <th className="p-2.5">Rabtakar</th>
                   <th className="p-2.5">Comments</th>
                 </tr>
               </thead>
@@ -500,9 +919,9 @@ export const PersonProfilePage: React.FC = () => {
                     <td className="p-2.5 font-medium whitespace-nowrap">
                       {new Date(m.meetingDate).toLocaleDateString()}
                     </td>
-                    <td className="p-2.5 font-semibold">#{m.meetingNumber}</td>
                     <td className="p-2.5">{m.unitId?.name || 'N/A'}</td>
                     <td className="p-2.5 font-medium">{m.primaryDaeenId?.fullName || 'N/A'}</td>
+                    <td className="p-2.5 text-typography-secondary">{m.rabtakarId?.fullName || '—'}</td>
                     <td className="p-2.5 text-typography-secondary max-w-xs truncate">
                       {m.comments || '—'}
                     </td>

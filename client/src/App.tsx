@@ -18,6 +18,8 @@ import { ReportsPage } from './pages/ReportsPage';
 import { AnalyticsPage } from './pages/AnalyticsPage';
 import { SettingsPage } from './pages/SettingsPage';
 import { SuperAdminPage } from './pages/SuperAdminPage';
+import { JoinWorkspacePage } from './pages/JoinWorkspacePage';
+import { AiAssistantPage } from './pages/AiAssistantPage';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -36,6 +38,7 @@ export const App: React.FC = () => {
           <BrowserRouter>
             <Routes>
               <Route path="/login" element={<LoginPage />} />
+              <Route path="/join/:workspaceId" element={<JoinWorkspacePage />} />
 
               <Route path="/" element={<AppLayout />}>
                 <Route index element={<DashboardPage />} />
@@ -57,6 +60,9 @@ export const App: React.FC = () => {
                 {/* Reports & Analytics */}
                 <Route path="reports" element={<ReportsPage />} />
                 <Route path="analytics" element={<AnalyticsPage />} />
+
+                {/* AI Assistant */}
+                <Route path="ai" element={<AiAssistantPage />} />
 
                 {/* Settings & Spectators */}
                 <Route path="settings" element={<SettingsPage />} />

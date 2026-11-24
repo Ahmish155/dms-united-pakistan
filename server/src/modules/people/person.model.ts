@@ -1,5 +1,5 @@
 import mongoose, { Schema, Document, Types } from 'mongoose';
-import { PersonStage, OrganizationalResponsibility } from '@dms/shared';
+import { PersonStage, OrganizationalResponsibility, OperationalStatus } from '@dms/shared';
 
 export interface IPersonDoc extends Document {
   workspaceId: Types.ObjectId;
@@ -9,6 +9,7 @@ export interface IPersonDoc extends Document {
   currentUnitId?: Types.ObjectId;
   assignedUnitIds?: Types.ObjectId[];
   currentStage: PersonStage;
+  operationalStatus?: OperationalStatus;
   roles: OrganizationalResponsibility[];
   primaryRabtakarId?: Types.ObjectId;
   defaultDaeenId?: Types.ObjectId;
@@ -56,6 +57,12 @@ const PersonSchema = new Schema<IPersonDoc>(
       type: String,
       enum: Object.values(PersonStage),
       default: PersonStage.MADU,
+      index: true
+    },
+    operationalStatus: {
+      type: String,
+      enum: Object.values(OperationalStatus),
+      default: OperationalStatus.ACTIVE,
       index: true
     },
     roles: [

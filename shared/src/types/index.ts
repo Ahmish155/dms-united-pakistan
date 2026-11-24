@@ -5,6 +5,7 @@ import {
   PersonStage,
   OrganizationalResponsibility,
   ActivityStatus,
+  OperationalStatus,
   DmmStatus,
   ParticipantCategory
 } from '../constants';
@@ -80,6 +81,7 @@ export interface IPerson {
   currentUnitId?: string | null;
   assignedUnitIds?: string[];
   currentStage: PersonStage;
+  operationalStatus?: OperationalStatus;
   roles: OrganizationalResponsibility[];
   primaryRabtakarId?: string;
   defaultDaeenId?: string;

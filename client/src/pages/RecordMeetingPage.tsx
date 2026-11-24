@@ -22,10 +22,10 @@ export const RecordMeetingPage: React.FC = () => {
   const [people, setPeople] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
 
-  // Form Fields
+  // Form Fields (Cascading Order: Unit -> Rabtakar -> Madu/Person -> Daeen -> Date)
   const [selectedUnitId, setSelectedUnitId] = useState('');
-  const [selectedPersonId, setSelectedPersonId] = useState('');
   const [rabtakarId, setRabtakarId] = useState('');
+  const [selectedPersonId, setSelectedPersonId] = useState('');
   const [primaryDaeenId, setPrimaryDaeenId] = useState('');
   const [additionalDaeenIds, setAdditionalDaeenIds] = useState<string[]>([]);
   const [meetingDate, setMeetingDate] = useState(
@@ -62,34 +62,55 @@ export const RecordMeetingPage: React.FC = () => {
     }
   }, [activeWorkspace]);
 
-  // When person changes, auto-populate unit, rabtakar, default daeen & calculate meeting number
+  // When Unit changes: reset Rabtakar and Person selections if not matching
+  const handleUnitChange = (unitId: string) => {
+    setSelectedUnitId(unitId);
+    setRabtakarId('');
+    setSelectedPersonId('');
+    setDuplicateWarning(null);
+  };
+
+  // When Rabtakar changes: reset Person selection and filter
+  const handleRabtakarChange = (rId: string) => {
+    setRabtakarId(rId);
+    setSelectedPersonId('');
+    setDuplicateWarning(null);
+  };
+
+  // When Person changes: auto-select their default Daeen
   const handlePersonChange = (personId: string) => {
     setSelectedPersonId(personId);
     setDuplicateWarning(null);
 
     const person = people.find((p) => p._id === personId);
     if (person) {
-      if (person.currentUnitId?._id) {
-        setSelectedUnitId(person.currentUnitId._id);
-      }
-      if (person.primaryRabtakarId?._id) {
-        setRabtakarId(person.primaryRabtakarId._id);
-      }
       if (person.defaultDaeenId?._id) {
         setPrimaryDaeenId(person.defaultDaeenId._id);
+      } else if (person.defaultDaeenId) {
+        setPrimaryDaeenId(person.defaultDaeenId);
       }
     }
   };
 
   const handleSubmit = async (e?: React.FormEvent, allowDuplicate = false) => {
     if (e) e.preventDefault();
+    if (!selectedPersonId) {
+      alert('Please select a Madu / MDF');
+      return;
+    }
+    if (!primaryDaeenId) {
+      alert('Please select a Primary Daeen');
+      return;
+    }
+
     setSubmitting(true);
     setDuplicateWarning(null);
 
     try {
       await ApiService.post('/meetings', {
         personId: selectedPersonId,
-        rabtakarId,
+        unitId: selectedUnitId || undefined,
+        rabtakarId: rabtakarId || undefined,
         primaryDaeenId,
         additionalDaeenIds,
         meetingDate: new Date(meetingDate).toISOString(),
@@ -109,22 +130,48 @@ export const RecordMeetingPage: React.FC = () => {
     }
   };
 
-  // Filter candidates
-  const eligiblePeople = people.filter(
-    (p) =>
-      (p.currentStage === PersonStage.MADU ||
-        p.currentStage === PersonStage.MDF) &&
-      (!selectedUnitId || p.currentUnitId?._id === selectedUnitId)
-  );
-
-  const rabtakarCandidates = people.filter(
-    (p) =>
+  // 1. Rabtakars associated with the selected Unit
+  const filteredRabtakars = people.filter((p) => {
+    const isRabtakar =
       p.currentStage === PersonStage.RABTAKAR ||
-      p.roles?.includes(OrganizationalResponsibility.RABTAKAR)
-  );
+      p.roles?.includes(OrganizationalResponsibility.RABTAKAR);
+    if (!isRabtakar) return false;
+    if (!selectedUnitId) return true;
 
-  const daeenCandidates = people.filter((p) =>
-    p.roles?.includes(OrganizationalResponsibility.DAEEN)
+    // Check primary unit
+    if (p.currentUnitId?._id === selectedUnitId || p.currentUnitId === selectedUnitId) return true;
+    // Check assigned units (multi-unit support)
+    if (p.assignedUnitIds && Array.isArray(p.assignedUnitIds)) {
+      return p.assignedUnitIds.some((u: any) => (u._id || u) === selectedUnitId);
+    }
+    return false;
+  });
+
+  // 2. Madu/MDF filtered by Unit AND by Rabtakar
+  const filteredPeople = people.filter((p) => {
+    const isMaduOrMdf =
+      p.currentStage === PersonStage.MADU || p.currentStage === PersonStage.MDF;
+    if (!isMaduOrMdf) return false;
+
+    // Filter by Unit
+    if (selectedUnitId && (p.currentUnitId?._id || p.currentUnitId) !== selectedUnitId) {
+      return false;
+    }
+
+    // Filter by Rabtakar
+    if (rabtakarId) {
+      const pRId = p.primaryRabtakarId?._id || p.primaryRabtakarId;
+      return pRId === rabtakarId;
+    }
+
+    return true;
+  });
+
+  // 3. Daeen Candidates (Sector Resource)
+  const daeenCandidates = people.filter(
+    (p) =>
+      p.currentStage === PersonStage.DAEEN ||
+      p.roles?.includes(OrganizationalResponsibility.DAEEN)
   );
 
   return (
@@ -143,7 +190,7 @@ export const RecordMeetingPage: React.FC = () => {
             Record Individual Meeting (IM)
           </h1>
           <p className="text-xs text-typography-secondary mt-0.5">
-            Log a completed meeting for {activeWorkspace?.name}. Unit and assignments auto-populate.
+            Log a completed meeting. Select Unit $\to$ Assigned Rabtakar $\to$ Associated Madu.
           </p>
         </div>
 
@@ -174,69 +221,91 @@ export const RecordMeetingPage: React.FC = () => {
         )}
 
         <form onSubmit={(e) => handleSubmit(e, false)} className="space-y-4">
-          {/* 1. Unit Selector */}
+          {/* Step 1: Unit Selector */}
           <div>
             <label className="block text-xs font-semibold text-typography-main mb-1">
-              Unit
+              1. Select Unit *
             </label>
             <select
+              required
               value={selectedUnitId}
-              onChange={(e) => setSelectedUnitId(e.target.value)}
+              onChange={(e) => handleUnitChange(e.target.value)}
               className="input-field text-xs"
             >
-              <option value="">All Units</option>
+              <option value="">Choose Unit...</option>
               {units.map((u) => (
                 <option key={u._id} value={u._id}>
-                  {u.name}
+                  {u.name} ({u.code})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* 2. Person Selector */}
+          {/* Step 2: Rabtakar (Filtered to Unit) */}
           <div>
-            <label className="block text-xs font-semibold text-typography-main mb-1">
-              Select Person (Madu / MDF) *
-            </label>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-semibold text-typography-main">
+                2. Select Rabtakar *
+              </label>
+              <span className="text-[10px] text-typography-secondary">
+                {filteredRabtakars.length} available in unit
+              </span>
+            </div>
+            <select
+              required
+              value={rabtakarId}
+              onChange={(e) => handleRabtakarChange(e.target.value)}
+              className="input-field text-xs"
+              disabled={!selectedUnitId}
+            >
+              <option value="">
+                {selectedUnitId ? 'Choose Rabtakar...' : 'Select a Unit first'}
+              </option>
+              {filteredRabtakars.map((r) => (
+                <option key={r._id} value={r._id}>
+                  {r.fullName} ({r.internalId})
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Step 3: Person (Madu / MDF) Filtered by Unit & Rabtakar */}
+          <div>
+            <div className="flex justify-between items-center mb-1">
+              <label className="block text-xs font-semibold text-typography-main">
+                3. Select Madu / MDF *
+              </label>
+              <span className="text-[10px] text-typography-secondary">
+                {filteredPeople.length} matched contacts
+              </span>
+            </div>
             <select
               required
               value={selectedPersonId}
               onChange={(e) => handlePersonChange(e.target.value)}
-              className="input-field text-xs font-medium"
-            >
-              <option value="">-- Choose person --</option>
-              {eligiblePeople.map((p) => (
-                <option key={p._id} value={p._id}>
-                  {p.fullName} ({p.currentStage}) — {p.currentUnitId?.name}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* 3. Rabtakar */}
-          <div>
-            <label className="block text-xs font-semibold text-typography-main mb-1">
-              Rabtakar *
-            </label>
-            <select
-              required
-              value={rabtakarId}
-              onChange={(e) => setRabtakarId(e.target.value)}
               className="input-field text-xs"
+              disabled={!rabtakarId}
             >
-              <option value="">-- Choose Rabtakar --</option>
-              {rabtakarCandidates.map((r) => (
-                <option key={r._id} value={r._id}>
-                  {r.fullName} ({r.currentUnitId?.name})
+              <option value="">
+                {rabtakarId ? 'Choose Madu or MDF...' : 'Select a Rabtakar first'}
+              </option>
+              {filteredPeople.map((p) => (
+                <option key={p._id} value={p._id}>
+                  {p.fullName} ({p.currentStage}) — {p.internalId}
                 </option>
               ))}
             </select>
+            {rabtakarId && filteredPeople.length === 0 && (
+              <p className="text-[11px] text-amber-600 mt-1">
+                No Madu assigned to this Rabtakar in this unit yet. Add one in People or select another Rabtakar.
+              </p>
+            )}
           </div>
 
-          {/* 4. Primary Daeen */}
+          {/* Step 4: Primary Daeen */}
           <div>
             <label className="block text-xs font-semibold text-typography-main mb-1">
-              Primary Assigned Daeen *
+              4. Primary Daeen (Sector Resource) *
             </label>
             <select
               required
@@ -244,55 +313,19 @@ export const RecordMeetingPage: React.FC = () => {
               onChange={(e) => setPrimaryDaeenId(e.target.value)}
               className="input-field text-xs"
             >
-              <option value="">-- Choose Daeen --</option>
+              <option value="">Select Primary Daeen...</option>
               {daeenCandidates.map((d) => (
                 <option key={d._id} value={d._id}>
-                  {d.fullName}
+                  {d.fullName} ({d.internalId})
                 </option>
               ))}
             </select>
           </div>
 
-          {/* 5. Additional Daeen */}
+          {/* Step 5: Meeting Date */}
           <div>
             <label className="block text-xs font-semibold text-typography-main mb-1">
-              Additional Participating Daeen (Optional)
-            </label>
-            <div className="flex flex-wrap gap-1.5">
-              {daeenCandidates
-                .filter((d) => d._id !== primaryDaeenId)
-                .map((d) => {
-                  const isSelected = additionalDaeenIds.includes(d._id);
-                  return (
-                    <button
-                      key={d._id}
-                      type="button"
-                      onClick={() => {
-                        if (isSelected) {
-                          setAdditionalDaeenIds(
-                            additionalDaeenIds.filter((id) => id !== d._id)
-                          );
-                        } else {
-                          setAdditionalDaeenIds([...additionalDaeenIds, d._id]);
-                        }
-                      }}
-                      className={`rounded-lg px-2.5 py-1 text-xs font-medium border transition-colors ${
-                        isSelected
-                          ? 'bg-brand-red text-white border-brand-red'
-                          : 'bg-surface-secondary border-surface-border text-typography-main'
-                      }`}
-                    >
-                      {d.fullName}
-                    </button>
-                  );
-                })}
-            </div>
-          </div>
-
-          {/* 6. Date */}
-          <div>
-            <label className="block text-xs font-semibold text-typography-main mb-1">
-              Meeting Date *
+              5. Meeting Date *
             </label>
             <input
               type="date"
@@ -301,33 +334,32 @@ export const RecordMeetingPage: React.FC = () => {
               onChange={(e) => setMeetingDate(e.target.value)}
               className="input-field text-xs"
             />
-            <p className="mt-1 text-[11px] text-typography-secondary">
-              Meeting number will be automatically calculated based on prior recorded meetings.
-            </p>
           </div>
 
-          {/* 7. Comments */}
+          {/* Step 6: Comments */}
           <div>
             <label className="block text-xs font-semibold text-typography-main mb-1">
-              Comments / Observations (Optional)
+              Meeting Notes / Dawati Feedback (Optional)
             </label>
             <textarea
-              rows={2}
+              rows={3}
               value={comments}
               onChange={(e) => setComments(e.target.value)}
-              placeholder="e.g. Discussed core concepts, confirmed attendance for upcoming DF"
-              className="input-field text-xs"
+              placeholder="e.g. Discussed core concepts, confirmed attendance for next DF..."
+              className="input-field text-xs resize-none"
             />
           </div>
 
-          {/* Submit */}
-          <button
-            type="submit"
-            disabled={submitting}
-            className="btn-primary w-full py-3 text-xs font-semibold shadow-md mt-2"
-          >
-            {submitting ? 'Recording Meeting...' : 'Save Completed Meeting'}
-          </button>
+          <div className="pt-2">
+            <button
+              type="submit"
+              disabled={submitting || !selectedPersonId || !primaryDaeenId}
+              className="btn-primary w-full py-2.5 text-xs flex items-center justify-center gap-1.5"
+            >
+              <CheckCircle2 className="h-4 w-4" />
+              <span>{submitting ? 'Recording Meeting...' : 'Record Meeting'}</span>
+            </button>
+          </div>
         </form>
       </div>
     </div>

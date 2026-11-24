@@ -16,11 +16,13 @@ import {
   BarChart3,
   FileText,
   Building2,
-  Settings
+  Settings,
+  Sparkles
 } from 'lucide-react';
 
 const mobileNavLinks = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { label: 'AI Assistant', path: '/ai', icon: Sparkles },
   { label: 'People Directory', path: '/people', icon: Users },
   { label: 'Individual Meetings', path: '/meetings', icon: CalendarCheck },
   { label: 'DMM Monthly Planning', path: '/dmm', icon: Target },

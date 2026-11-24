@@ -199,6 +199,8 @@ export class MeetingService {
 
     const previousState = meeting.toObject();
 
+    if (data.personId) meeting.personId = new Types.ObjectId(data.personId);
+    if (data.unitId) meeting.unitId = new Types.ObjectId(data.unitId);
     if (data.meetingDate) meeting.meetingDate = new Date(data.meetingDate);
     if (data.meetingNumber) meeting.meetingNumber = data.meetingNumber;
     if (data.rabtakarId) meeting.rabtakarId = new Types.ObjectId(data.rabtakarId);

@@ -8,7 +8,11 @@ import {
   Calendar,
   CheckCircle2,
   TrendingUp,
-  Clock
+  Clock,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { PersonStage, WorkspaceRole } from '@dms/shared';
 
@@ -21,6 +25,17 @@ export const RmmPage: React.FC = () => {
 
   // Create RMM Modal
   const [createModalOpen, setCreateModalOpen] = useState(false);
+
+  // Edit RMM Modal
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editRmmDate, setEditRmmDate] = useState('');
+  const [editWeekStartDate, setEditWeekStartDate] = useState('');
+  const [editWeekEndDate, setEditWeekEndDate] = useState('');
+  const [editPlannedMadu, setEditPlannedMadu] = useState<number>(0);
+  const [editPlannedMdf, setEditPlannedMdf] = useState<number>(0);
+  const [editComments, setEditComments] = useState('');
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
   const [units, setUnits] = useState<any[]>([]);
   const [people, setPeople] = useState<any[]>([]);
 
@@ -150,6 +165,54 @@ export const RmmPage: React.FC = () => {
     }
   };
 
+  const openEditRmm = () => {
+    if (!selectedRmmProgress?.rmm) return;
+    const r = selectedRmmProgress.rmm;
+    setEditRmmDate(r.rmmDate ? r.rmmDate.split('T')[0] : '');
+    setEditWeekStartDate(r.weekStartDate ? r.weekStartDate.split('T')[0] : '');
+    setEditWeekEndDate(r.weekEndDate ? r.weekEndDate.split('T')[0] : '');
+    setEditPlannedMadu(r.plannedMaduMeetings || 0);
+    setEditPlannedMdf(r.plannedMdfMeetings || 0);
+    setEditComments(r.comments || '');
+    setEditModalOpen(true);
+  };
+
+  const handleUpdateRmm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedRmmId) return;
+    try {
+      setSavingEdit(true);
+      await ApiService.patch(`/rmm/${selectedRmmId}`, {
+        rmmDate: editRmmDate,
+        weekStartDate: editWeekStartDate,
+        weekEndDate: editWeekEndDate,
+        plannedMaduMeetings: Number(editPlannedMadu),
+        plannedMdfMeetings: Number(editPlannedMdf),
+        comments: editComments || undefined
+      });
+      setEditModalOpen(false);
+      await fetchRmmProgress(selectedRmmId);
+      await fetchRmmList();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update RMM');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteRmm = async () => {
+    if (!selectedRmmId) return;
+    try {
+      await ApiService.delete(`/rmm/${selectedRmmId}`);
+      setDeleteConfirm(false);
+      setSelectedRmmId(null);
+      setSelectedRmmProgress(null);
+      await fetchRmmList();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete RMM');
+    }
+  };
+
   const isSecretary = activeRole === WorkspaceRole.SECTOR_SECRETARY;
 
   return (
@@ -233,6 +296,34 @@ export const RmmPage: React.FC = () => {
           <div className="lg:col-span-2 space-y-5">
             {selectedRmmProgress ? (
               <div className="space-y-5">
+                {/* Session Header & Edit Actions */}
+                <div className="flex items-center justify-between bg-white p-3.5 rounded-xl border border-surface-border">
+                  <div>
+                    <h3 className="font-bold text-sm text-typography-main">
+                      Unit {selectedRmmProgress.rmm?.unitId?.name} — Weekly Session
+                    </h3>
+                    <p className="text-xs text-typography-secondary">
+                      Window: {new Date(selectedRmmProgress.rmm?.weekStartDate).toLocaleDateString()} to {new Date(selectedRmmProgress.rmm?.weekEndDate).toLocaleDateString()}
+                    </p>
+                  </div>
+                  {isSecretary && (
+                    <div className="flex gap-2">
+                      <button
+                        onClick={openEditRmm}
+                        className="btn-secondary text-xs py-1.5 px-3 flex items-center gap-1"
+                      >
+                        <Edit2 className="h-3.5 w-3.5" /> Edit RMM
+                      </button>
+                      <button
+                        onClick={() => setDeleteConfirm(true)}
+                        className="rounded border border-red-200 text-status-error hover:bg-red-50 text-xs py-1.5 px-3 flex items-center gap-1 transition-colors"
+                      >
+                        <Trash2 className="h-3.5 w-3.5" /> Delete
+                      </button>
+                    </div>
+                  )}
+                </div>
+
                 {/* Summary Cards */}
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-3">
                   <div className="rounded-xl border border-surface-border bg-white p-3.5 shadow-sm">
@@ -534,6 +625,138 @@ export const RmmPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit RMM Modal */}
+      {editModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-xl my-8 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-base text-typography-main">Edit Weekly RMM</h3>
+              <button onClick={() => setEditModalOpen(false)} className="text-typography-muted hover:text-typography-main">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateRmm} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">RMM Meeting Date</label>
+                <input
+                  type="date"
+                  required
+                  value={editRmmDate}
+                  onChange={(e) => setEditRmmDate(e.target.value)}
+                  className="input-field text-xs"
+                />
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">Week Start</label>
+                  <input
+                    type="date"
+                    required
+                    value={editWeekStartDate}
+                    onChange={(e) => setEditWeekStartDate(e.target.value)}
+                    className="input-field text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">Week End</label>
+                  <input
+                    type="date"
+                    required
+                    value={editWeekEndDate}
+                    onChange={(e) => setEditWeekEndDate(e.target.value)}
+                    className="input-field text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">Planned Madu IMs</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editPlannedMadu}
+                    onChange={(e) => setEditPlannedMadu(parseInt(e.target.value, 10) || 0)}
+                    className="input-field text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">Planned MDF IMs</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editPlannedMdf}
+                    onChange={(e) => setEditPlannedMdf(parseInt(e.target.value, 10) || 0)}
+                    className="input-field text-xs"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">Comments / Notes</label>
+                <textarea
+                  rows={2}
+                  value={editComments}
+                  onChange={(e) => setEditComments(e.target.value)}
+                  className="input-field text-xs resize-none"
+                  placeholder="Notes on weekly targets..."
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditModalOpen(false)}
+                  className="btn-secondary text-xs py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="btn-primary text-xs py-2"
+                >
+                  {savingEdit ? 'Saving...' : 'Update RMM'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="rounded-xl bg-white shadow-xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-red-100 p-2">
+                <AlertTriangle className="h-5 w-5 text-status-error" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-typography-main">Delete Weekly RMM</h3>
+                <p className="text-xs text-typography-secondary">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-xs text-typography-main">
+              Are you sure you want to delete this RMM session and its associated targets?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteConfirm(false)} className="btn-secondary text-xs py-1.5 px-3">
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteRmm}
+                className="text-xs py-1.5 px-4 rounded-lg bg-status-error text-white hover:opacity-90 font-semibold"
+              >
+                Yes, Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

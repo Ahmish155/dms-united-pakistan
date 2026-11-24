@@ -35,7 +35,13 @@ export const LoginPage: React.FC = () => {
           setIsRegister(false);
         } else if (result.token) {
           login(result.token, result.user);
-          navigate('/');
+          const pending = localStorage.getItem('dms_pending_invite');
+          if (pending) {
+            localStorage.removeItem('dms_pending_invite');
+            navigate(pending);
+          } else {
+            navigate('/');
+          }
         }
       } else {
         const result = await ApiService.post<{ token: string; user: any }>('/auth/login', {

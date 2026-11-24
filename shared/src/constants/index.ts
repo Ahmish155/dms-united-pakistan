@@ -36,6 +36,14 @@ export enum ActivityStatus {
   INACTIVE = 'INACTIVE'
 }
 
+export enum OperationalStatus {
+  PIPELINE = 'PIPELINE',
+  ACTIVE = 'ACTIVE',
+  INACTIVE = 'INACTIVE',
+  FREEZED = 'FREEZED',
+  DROPPED = 'DROPPED'
+}
+
 export enum DmmStatus {
   DRAFT = 'DRAFT',
   FINALIZED = 'FINALIZED'

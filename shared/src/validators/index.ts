@@ -5,6 +5,7 @@ import {
   PersonStage,
   OrganizationalResponsibility,
   ParticipantCategory,
+  OperationalStatus,
   DmmStatus
 } from '../constants';
 
@@ -38,6 +39,7 @@ export const createPersonSchema = z.object({
   currentUnitId: z.string().optional().nullable(),
   assignedUnitIds: z.array(z.string()).default([]),
   currentStage: z.nativeEnum(PersonStage),
+  operationalStatus: z.nativeEnum(OperationalStatus).optional(),
   roles: z.array(z.nativeEnum(OrganizationalResponsibility)).default([]),
   primaryRabtakarId: z.string().optional(),
   defaultDaeenId: z.string().optional(),
@@ -50,6 +52,7 @@ export const updatePersonSchema = z.object({
   currentUnitId: z.string().optional().nullable(),
   assignedUnitIds: z.array(z.string()).optional(),
   currentStage: z.nativeEnum(PersonStage).optional(),
+  operationalStatus: z.nativeEnum(OperationalStatus).optional(),
   roles: z.array(z.nativeEnum(OrganizationalResponsibility)).optional(),
   primaryRabtakarId: z.string().optional().nullable(),
   defaultDaeenId: z.string().optional().nullable(),

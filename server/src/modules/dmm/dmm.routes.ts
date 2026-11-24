@@ -11,5 +11,7 @@ router.use(requireWorkspace);
 router.post('/', DmmController.saveDmm);
 router.get('/', DmmController.getDmms);
 router.get('/:id/variance', DmmController.getDmmVariance);
+router.patch('/:id', DmmController.updateDmm);
+router.delete('/:id', DmmController.deleteDmm);
 
 export const dmmRoutes = router;

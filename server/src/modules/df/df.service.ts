@@ -133,10 +133,16 @@ export class DfService {
     workspaceId: string,
     dfId: string,
     data: {
+      unitId?: string;
       date?: string;
       mentorId?: string;
       topic?: string;
       comments?: string;
+      participants?: Array<{
+        personId: string;
+        category: ParticipantCategory;
+        status?: 'ATTENDED' | 'ABSENT';
+      }>;
     },
     userId: string
   ) {
@@ -146,11 +152,25 @@ export class DfService {
     });
     if (!df) throw new AppError('Dialogue Forum not found', 404);
 
+    if (data.unitId) df.unitId = new Types.ObjectId(data.unitId);
     if (data.date) df.date = new Date(data.date);
     if (data.mentorId) df.mentorId = new Types.ObjectId(data.mentorId);
     if (data.topic !== undefined) (df as any).topic = data.topic;
     if (data.comments !== undefined) (df as any).comments = data.comments;
     await df.save();
+
+    if (data.participants !== undefined) {
+      await DfAttendanceModel.deleteMany({ dfId: df._id });
+      for (const p of data.participants) {
+        await DfAttendanceModel.create({
+          workspaceId: new Types.ObjectId(workspaceId),
+          dfId: df._id,
+          personId: new Types.ObjectId(p.personId),
+          category: p.category,
+          status: p.status || 'ATTENDED'
+        });
+      }
+    }
 
     await AuditLogModel.create({
       workspaceId: new Types.ObjectId(workspaceId),

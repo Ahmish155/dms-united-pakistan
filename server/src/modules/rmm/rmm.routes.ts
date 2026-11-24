@@ -11,5 +11,7 @@ router.use(requireWorkspace);
 router.post('/', RmmController.createRmm);
 router.get('/', RmmController.getRmmList);
 router.get('/:id/progress', RmmController.getRmmProgress);
+router.patch('/:id', RmmController.updateRmm);
+router.delete('/:id', RmmController.deleteRmm);
 
 export const rmmRoutes = router;

@@ -99,10 +99,16 @@ export class GmService {
     workspaceId: string,
     gmId: string,
     data: {
+      unitId?: string;
       date?: string;
       facilitatorPersonId?: string;
       topic?: string;
       comments?: string;
+      participants?: Array<{
+        personId: string;
+        category: ParticipantCategory;
+        status?: 'ATTENDED' | 'ABSENT';
+      }>;
     },
     userId: string
   ) {
@@ -112,6 +118,7 @@ export class GmService {
     });
     if (!gm) throw new AppError('Group Meeting not found', 404);
 
+    if (data.unitId) gm.unitId = new Types.ObjectId(data.unitId);
     if (data.date) gm.date = new Date(data.date);
     if (data.facilitatorPersonId !== undefined)
       (gm as any).facilitatorPersonId = data.facilitatorPersonId
@@ -120,6 +127,19 @@ export class GmService {
     if (data.topic !== undefined) (gm as any).topic = data.topic;
     if (data.comments !== undefined) (gm as any).comments = data.comments;
     await gm.save();
+
+    if (data.participants !== undefined) {
+      await GmAttendanceModel.deleteMany({ gmId: gm._id });
+      for (const p of data.participants) {
+        await GmAttendanceModel.create({
+          workspaceId: new Types.ObjectId(workspaceId),
+          gmId: gm._id,
+          personId: new Types.ObjectId(p.personId),
+          category: p.category,
+          status: p.status || 'ATTENDED'
+        });
+      }
+    }
 
     await AuditLogModel.create({
       workspaceId: new Types.ObjectId(workspaceId),

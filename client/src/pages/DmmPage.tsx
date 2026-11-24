@@ -9,7 +9,11 @@ import {
   TrendingUp,
   Building2,
   Share2,
-  Copy
+  Copy,
+  Edit2,
+  Trash2,
+  AlertTriangle,
+  X
 } from 'lucide-react';
 import { DmmStatus, PersonStage, WorkspaceRole } from '@dms/shared';
 
@@ -43,6 +47,14 @@ export const DmmPage: React.FC = () => {
 
   const [expectedMsc, setExpectedMsc] = useState<number>(0);
   const [expectedMdf, setExpectedMdf] = useState<number>(0);
+
+  // Edit DMM State
+  const [editDmmOpen, setEditDmmOpen] = useState(false);
+  const [editDmmStatus, setEditDmmStatus] = useState<DmmStatus>(DmmStatus.DRAFT);
+  const [editMscCount, setEditMscCount] = useState<number>(0);
+  const [editMdfCount, setEditMdfCount] = useState<number>(0);
+  const [deleteConfirm, setDeleteConfirm] = useState(false);
+  const [savingEdit, setSavingEdit] = useState(false);
 
   const fetchDmmData = async () => {
     try {
@@ -130,6 +142,45 @@ export const DmmPage: React.FC = () => {
     }
   };
 
+  const openEditDmm = () => {
+    if (!dmmData?.dmm) return;
+    setEditDmmStatus(dmmData.dmm.status || DmmStatus.DRAFT);
+    setEditMscCount(dmmData.dmm.expectedMscCount || 0);
+    setEditMdfCount(dmmData.dmm.expectedMdfCount || 0);
+    setEditDmmOpen(true);
+  };
+
+  const handleUpdateDmm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!dmmData?.dmm?._id) return;
+    try {
+      setSavingEdit(true);
+      await ApiService.patch(`/dmm/${dmmData.dmm._id}`, {
+        status: editDmmStatus,
+        expectedMscCount: Number(editMscCount),
+        expectedMdfCount: Number(editMdfCount)
+      });
+      setEditDmmOpen(false);
+      await fetchDmmData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update DMM');
+    } finally {
+      setSavingEdit(false);
+    }
+  };
+
+  const handleDeleteDmm = async () => {
+    if (!dmmData?.dmm?._id) return;
+    try {
+      await ApiService.delete(`/dmm/${dmmData.dmm._id}`);
+      setDeleteConfirm(false);
+      setDmmData(null);
+      await fetchDmmData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to delete DMM');
+    }
+  };
+
   const copyWhatsAppSummary = () => {
     if (!dmmData) return;
     const { summary, unitConclusions } = dmmData;
@@ -175,6 +226,25 @@ export const DmmPage: React.FC = () => {
               <Copy className="h-3.5 w-3.5" />
               <span>Copy WhatsApp</span>
             </button>
+          )}
+
+          {dmmData && isSecretary && (
+            <>
+              <button
+                onClick={openEditDmm}
+                className="btn-secondary gap-1.5 text-xs py-2"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit DMM</span>
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                className="rounded border border-red-200 text-status-error hover:bg-red-50 text-xs py-2 px-3 flex items-center gap-1.5 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
+            </>
           )}
 
           {isSecretary && (
@@ -237,6 +307,25 @@ export const DmmPage: React.FC = () => {
           <p className="text-xs text-typography-secondary max-w-sm mx-auto">
             At the beginning of each month, record the individual meeting targets for each unit to track monthly progress.
           </p>
+          {dmmData && isSecretary && (
+            <>
+              <button
+                onClick={openEditDmm}
+                className="btn-secondary gap-1.5 text-xs py-2"
+              >
+                <Edit2 className="h-3.5 w-3.5" />
+                <span>Edit DMM</span>
+              </button>
+              <button
+                onClick={() => setDeleteConfirm(true)}
+                className="rounded border border-red-200 text-status-error hover:bg-red-50 text-xs py-2 px-3 flex items-center gap-1.5 transition-colors"
+              >
+                <Trash2 className="h-3.5 w-3.5" />
+                <span>Delete</span>
+              </button>
+            </>
+          )}
+
           {isSecretary && (
             <button
               onClick={() => setTargetModalOpen(true)}
@@ -478,6 +567,105 @@ export const DmmPage: React.FC = () => {
                 </button>
               </div>
             </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit DMM Modal */}
+      {editDmmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-xl my-8 space-y-4">
+            <div className="flex justify-between items-center">
+              <h3 className="font-bold text-base text-typography-main">Edit DMM Plan</h3>
+              <button onClick={() => setEditDmmOpen(false)} className="text-typography-muted hover:text-typography-main">
+                <X className="h-4 w-4" />
+              </button>
+            </div>
+
+            <form onSubmit={handleUpdateDmm} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">Plan Status</label>
+                <select
+                  value={editDmmStatus}
+                  onChange={(e) => setEditDmmStatus(e.target.value as DmmStatus)}
+                  className="input-field text-xs"
+                >
+                  <option value={DmmStatus.DRAFT}>Draft</option>
+                  <option value={DmmStatus.FINALIZED}>Finalized</option>
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">Expected MSC Promotions</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editMscCount}
+                    onChange={(e) => setEditMscCount(parseInt(e.target.value, 10) || 0)}
+                    className="input-field text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">Expected MDF Promotions</label>
+                  <input
+                    type="number"
+                    min="0"
+                    value={editMdfCount}
+                    onChange={(e) => setEditMdfCount(parseInt(e.target.value, 10) || 0)}
+                    className="input-field text-xs"
+                  />
+                </div>
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditDmmOpen(false)}
+                  className="btn-secondary text-xs py-2"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingEdit}
+                  className="btn-primary text-xs py-2"
+                >
+                  {savingEdit ? 'Saving...' : 'Update DMM'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirm Modal */}
+      {deleteConfirm && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 p-4">
+          <div className="rounded-xl bg-white shadow-xl p-6 w-full max-w-sm space-y-4">
+            <div className="flex items-center gap-3">
+              <div className="rounded-full bg-red-100 p-2">
+                <AlertTriangle className="h-5 w-5 text-status-error" />
+              </div>
+              <div>
+                <h3 className="text-sm font-bold text-typography-main">Delete Monthly DMM</h3>
+                <p className="text-xs text-typography-secondary">This action cannot be undone.</p>
+              </div>
+            </div>
+            <p className="text-xs text-typography-main">
+              Are you sure you want to delete this DMM plan and all its target assignments?
+            </p>
+            <div className="flex gap-2 justify-end">
+              <button onClick={() => setDeleteConfirm(false)} className="btn-secondary text-xs py-1.5 px-3">
+                Cancel
+              </button>
+              <button
+                onClick={handleDeleteDmm}
+                className="text-xs py-1.5 px-4 rounded-lg bg-status-error text-white hover:opacity-90 font-semibold"
+              >
+                Yes, Delete
+              </button>
+            </div>
           </div>
         </div>
       )}

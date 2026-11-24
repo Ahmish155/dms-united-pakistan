@@ -204,4 +204,89 @@ export class RmmService {
       targets: calculatedTargets
     };
   }
+
+  static async updateRmm(
+    workspaceId: string,
+    rmmId: string,
+    data: {
+      unitId?: string;
+      rmmDate?: string;
+      weekStartDate?: string;
+      weekEndDate?: string;
+      plannedMaduMeetings?: number;
+      plannedMdfMeetings?: number;
+      comments?: string;
+      status?: 'ACTIVE' | 'ENDED';
+      targets?: Array<{
+        personId: string;
+        category: PersonStage;
+        nextWeekTarget: number;
+        expectedDay?: string;
+      }>;
+    },
+    userId: string
+  ) {
+    const rmm = await RmmModel.findOne({
+      _id: new Types.ObjectId(rmmId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!rmm) throw new AppError('RMM record not found', 404);
+
+    if (data.unitId) rmm.unitId = new Types.ObjectId(data.unitId);
+    if (data.rmmDate) rmm.rmmDate = new Date(data.rmmDate);
+    if (data.weekStartDate) rmm.weekStartDate = new Date(data.weekStartDate);
+    if (data.weekEndDate) rmm.weekEndDate = new Date(data.weekEndDate);
+    if (data.plannedMaduMeetings !== undefined) rmm.plannedMaduMeetings = data.plannedMaduMeetings;
+    if (data.plannedMdfMeetings !== undefined) rmm.plannedMdfMeetings = data.plannedMdfMeetings;
+    if (data.comments !== undefined) rmm.comments = data.comments;
+    if (data.status) rmm.status = data.status;
+    await rmm.save();
+
+    if (data.targets && data.targets.length > 0) {
+      await RmmTargetModel.deleteMany({ rmmId: rmm._id });
+      for (const t of data.targets) {
+        await RmmTargetModel.create({
+          workspaceId: new Types.ObjectId(workspaceId),
+          rmmId: rmm._id,
+          personId: new Types.ObjectId(t.personId),
+          category: t.category,
+          nextWeekTarget: t.nextWeekTarget,
+          expectedDay: t.expectedDay
+        });
+      }
+    }
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'RMM_UPDATED',
+      entityType: 'Rmm',
+      entityId: rmm._id,
+      newState: data
+    });
+
+    return this.getRmmProgress(workspaceId, rmm._id.toString());
+  }
+
+  static async deleteRmm(workspaceId: string, rmmId: string, userId: string) {
+    const rmm = await RmmModel.findOne({
+      _id: new Types.ObjectId(rmmId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!rmm) throw new AppError('RMM record not found', 404);
+
+    await RmmTargetModel.deleteMany({ rmmId: rmm._id });
+    await rmm.deleteOne();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'RMM_DELETED',
+      entityType: 'Rmm',
+      entityId: rmm._id,
+      newState: {}
+    });
+
+    return { deleted: true };
+  }
 }

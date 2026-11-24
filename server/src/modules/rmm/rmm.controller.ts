@@ -51,4 +51,37 @@ export class RmmController {
       next(error);
     }
   }
+
+  static async updateRmm(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await RmmService.updateRmm(
+        req.workspaceId!,
+        req.params.id,
+        req.body,
+        req.user!.id
+      );
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteRmm(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await RmmService.deleteRmm(
+        req.workspaceId!,
+        req.params.id,
+        req.user!.id
+      );
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

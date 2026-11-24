@@ -231,4 +231,85 @@ export class DmmService {
       unitConclusions
     };
   }
+
+  static async updateDmm(
+    workspaceId: string,
+    dmmId: string,
+    data: {
+      status?: DmmStatus;
+      sessionStatus?: 'ACTIVE' | 'ENDED';
+      expectedMscCount?: number;
+      expectedMdfCount?: number;
+      targets?: Array<{
+        unitId: string;
+        personId: string;
+        targetMeetings: number;
+        rabtakarId: string;
+        daeenId: string;
+        category: PersonStage;
+      }>;
+    },
+    userId: string
+  ) {
+    const dmm = await DmmModel.findOne({
+      _id: new Types.ObjectId(dmmId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!dmm) throw new AppError('DMM record not found', 404);
+
+    if (data.status) dmm.status = data.status;
+    if (data.sessionStatus) (dmm as any).sessionStatus = data.sessionStatus;
+    if (data.expectedMscCount !== undefined) dmm.expectedMscCount = data.expectedMscCount;
+    if (data.expectedMdfCount !== undefined) dmm.expectedMdfCount = data.expectedMdfCount;
+    await dmm.save();
+
+    if (data.targets && data.targets.length > 0) {
+      await DmmTargetModel.deleteMany({ dmmId: dmm._id });
+      for (const t of data.targets) {
+        await DmmTargetModel.create({
+          workspaceId: new Types.ObjectId(workspaceId),
+          dmmId: dmm._id,
+          unitId: new Types.ObjectId(t.unitId),
+          personId: new Types.ObjectId(t.personId),
+          category: t.category,
+          targetMeetings: t.targetMeetings,
+          rabtakarId: new Types.ObjectId(t.rabtakarId),
+          daeenId: new Types.ObjectId(t.daeenId)
+        });
+      }
+    }
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'DMM_UPDATED',
+      entityType: 'Dmm',
+      entityId: dmm._id,
+      newState: data
+    });
+
+    return this.getDmmVariance(workspaceId, dmm._id.toString());
+  }
+
+  static async deleteDmm(workspaceId: string, dmmId: string, userId: string) {
+    const dmm = await DmmModel.findOne({
+      _id: new Types.ObjectId(dmmId),
+      workspaceId: new Types.ObjectId(workspaceId)
+    });
+    if (!dmm) throw new AppError('DMM record not found', 404);
+
+    await DmmTargetModel.deleteMany({ dmmId: dmm._id });
+    await dmm.deleteOne();
+
+    await AuditLogModel.create({
+      workspaceId: new Types.ObjectId(workspaceId),
+      userId: new Types.ObjectId(userId),
+      action: 'DMM_DELETED',
+      entityType: 'Dmm',
+      entityId: dmm._id,
+      newState: {}
+    });
+
+    return { deleted: true };
+  }
 }

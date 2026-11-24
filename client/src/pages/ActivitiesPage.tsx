@@ -12,6 +12,7 @@ import {
   Shield,
   Clock,
   Trash2,
+  Edit2,
   AlertTriangle
 } from 'lucide-react';
 import { ParticipantCategory, WorkspaceRole } from '@dms/shared';
@@ -51,6 +52,26 @@ export const ActivitiesPage: React.FC = () => {
   // Add Mentor Form
   const [mentorName, setMentorName] = useState('');
   const [mentorSpecialization, setMentorSpecialization] = useState('');
+
+  // Edit DF state
+  const [editDfOpen, setEditDfOpen] = useState(false);
+  const [editDfTarget, setEditDfTarget] = useState<any | null>(null);
+  const [editDfUnitId, setEditDfUnitId] = useState('');
+  const [editDfDate, setEditDfDate] = useState('');
+  const [editDfMentorId, setEditDfMentorId] = useState('');
+  const [editDfTopic, setEditDfTopic] = useState('');
+  const [editDfComments, setEditDfComments] = useState('');
+  const [editDfAttendees, setEditDfAttendees] = useState<string[]>([]);
+
+  // Edit GM state
+  const [editGmOpen, setEditGmOpen] = useState(false);
+  const [editGmTarget, setEditGmTarget] = useState<any | null>(null);
+  const [editGmUnitId, setEditGmUnitId] = useState('');
+  const [editGmDate, setEditGmDate] = useState('');
+  const [editGmFacilitatorId, setEditGmFacilitatorId] = useState('');
+  const [editGmTopic, setEditGmTopic] = useState('');
+  const [editGmComments, setEditGmComments] = useState('');
+  const [editGmAttendees, setEditGmAttendees] = useState<string[]>([]);
 
   // Delete state
   const [deleteTarget, setDeleteTarget] = useState<{ id: string; type: 'DF' | 'GM'; label: string } | null>(null);
@@ -184,6 +205,88 @@ export const ActivitiesPage: React.FC = () => {
   };
 
   const isSecretary = activeRole === WorkspaceRole.SECTOR_SECRETARY;
+
+  const openEditDf = (df: any) => {
+    setEditDfTarget(df);
+    setEditDfUnitId(df.unitId?._id || df.unitId || '');
+    setEditDfDate(df.date ? df.date.split('T')[0] : '');
+    setEditDfMentorId(df.mentorId?._id || df.mentorId || '');
+    setEditDfTopic(df.topic || '');
+    setEditDfComments(df.comments || '');
+    setEditDfAttendees(df.attendance?.map((a: any) => a.personId?._id || a.personId) || []);
+    setEditDfOpen(true);
+  };
+
+  const handleUpdateDf = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editDfTarget) return;
+    try {
+      const participants = editDfAttendees.map((pid) => {
+        const p = people.find((x) => x._id === pid);
+        return {
+          personId: pid,
+          category: (p?.currentStage as any) || ParticipantCategory.OTHER,
+          status: 'ATTENDED' as const
+        };
+      });
+
+      await ApiService.patch(`/df/${editDfTarget._id}`, {
+        unitId: editDfUnitId,
+        date: new Date(editDfDate).toISOString(),
+        mentorId: editDfMentorId,
+        topic: editDfTopic || undefined,
+        comments: editDfComments || undefined,
+        participants
+      });
+
+      setEditDfOpen(false);
+      setEditDfTarget(null);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update Dialogue Forum');
+    }
+  };
+
+  const openEditGm = (gm: any) => {
+    setEditGmTarget(gm);
+    setEditGmUnitId(gm.unitId?._id || gm.unitId || '');
+    setEditGmDate(gm.date ? gm.date.split('T')[0] : '');
+    setEditGmFacilitatorId(gm.facilitatorPersonId?._id || gm.facilitatorPersonId || '');
+    setEditGmTopic(gm.topic || '');
+    setEditGmComments(gm.comments || '');
+    setEditGmAttendees(gm.attendance?.map((a: any) => a.personId?._id || a.personId) || []);
+    setEditGmOpen(true);
+  };
+
+  const handleUpdateGm = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!editGmTarget) return;
+    try {
+      const participants = editGmAttendees.map((pid) => {
+        const p = people.find((x) => x._id === pid);
+        return {
+          personId: pid,
+          category: (p?.currentStage as any) || ParticipantCategory.OTHER,
+          status: 'ATTENDED' as const
+        };
+      });
+
+      await ApiService.patch(`/gm/${editGmTarget._id}`, {
+        unitId: editGmUnitId,
+        date: new Date(editGmDate).toISOString(),
+        facilitatorPersonId: editGmFacilitatorId || undefined,
+        topic: editGmTopic || undefined,
+        comments: editGmComments || undefined,
+        participants
+      });
+
+      setEditGmOpen(false);
+      setEditGmTarget(null);
+      await fetchData();
+    } catch (err: any) {
+      alert(err.message || 'Failed to update Group Meeting');
+    }
+  };
 
   const handleDeleteActivity = async () => {
     if (!deleteTarget) return;
@@ -347,9 +450,15 @@ export const ActivitiesPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Delete Button */}
+                {/* Actions */}
                 {isSecretary && (
-                  <div className="pt-2 border-t border-surface-border flex justify-end">
+                  <div className="pt-2 border-t border-surface-border flex justify-end gap-1.5">
+                    <button
+                      onClick={() => openEditDf(df)}
+                      className="text-[10px] text-typography-main hover:bg-gray-100 rounded px-2 py-1 flex items-center gap-1 transition-colors border border-surface-border"
+                    >
+                      <Edit2 className="h-3 w-3" /> Edit
+                    </button>
                     <button
                       onClick={() => setDeleteTarget({ id: df._id, type: 'DF', label: df.topic || 'Dialogue Forum' })}
                       className="text-[10px] text-status-error hover:bg-red-50 rounded px-2 py-1 flex items-center gap-1 transition-colors"
@@ -421,9 +530,15 @@ export const ActivitiesPage: React.FC = () => {
                   </div>
                 )}
 
-                {/* Delete Button */}
+                {/* Actions */}
                 {isSecretary && (
-                  <div className="pt-2 border-t border-surface-border flex justify-end">
+                  <div className="pt-2 border-t border-surface-border flex justify-end gap-1.5">
+                    <button
+                      onClick={() => openEditGm(gm)}
+                      className="text-[10px] text-typography-main hover:bg-gray-100 rounded px-2 py-1 flex items-center gap-1 transition-colors border border-surface-border"
+                    >
+                      <Edit2 className="h-3 w-3" /> Edit
+                    </button>
                     <button
                       onClick={() => setDeleteTarget({ id: gm._id, type: 'GM', label: gm.topic || 'Group Meeting' })}
                       className="text-[10px] text-status-error hover:bg-red-50 rounded px-2 py-1 flex items-center gap-1 transition-colors"
@@ -532,7 +647,9 @@ export const ActivitiesPage: React.FC = () => {
                   Mark Participants Attended:
                 </label>
                 <div className="max-h-40 overflow-y-auto border border-surface-border rounded-lg p-2 space-y-1 bg-surface-secondary/30">
-                  {people.map((p) => {
+                  {people
+                    .filter((p) => !dfUnitId || p.currentUnitId?._id === dfUnitId || p.currentUnitId === dfUnitId)
+                    .map((p) => {
                     const isAttended = dfAttendees.includes(p._id);
                     return (
                       <button
@@ -647,7 +764,9 @@ export const ActivitiesPage: React.FC = () => {
                   Mark Participants Attended:
                 </label>
                 <div className="max-h-40 overflow-y-auto border border-surface-border rounded-lg p-2 space-y-1 bg-surface-secondary/30">
-                  {people.map((p) => {
+                  {people
+                    .filter((p) => !dfUnitId || p.currentUnitId?._id === dfUnitId || p.currentUnitId === dfUnitId)
+                    .map((p) => {
                     const isAttended = gmAttendees.includes(p._id);
                     return (
                       <button
@@ -731,6 +850,262 @@ export const ActivitiesPage: React.FC = () => {
                 </button>
                 <button type="submit" className="btn-primary text-xs py-2">
                   Save Mentor
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit DF Modal */}
+      {editDfOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-xl my-8 space-y-4">
+            <h3 className="font-bold text-base text-typography-main">Edit Dialogue Forum</h3>
+
+            <form onSubmit={handleUpdateDf} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Unit *
+                </label>
+                <select
+                  required
+                  value={editDfUnitId}
+                  onChange={(e) => setEditDfUnitId(e.target.value)}
+                  className="input-field text-xs"
+                >
+                  {units.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editDfDate}
+                    onChange={(e) => setEditDfDate(e.target.value)}
+                    className="input-field text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">
+                    Mentor *
+                  </label>
+                  <select
+                    required
+                    value={editDfMentorId}
+                    onChange={(e) => setEditDfMentorId(e.target.value)}
+                    className="input-field text-xs"
+                  >
+                    {mentors.map((m) => (
+                      <option key={m._id} value={m._id}>
+                        {m.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Topic (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editDfTopic}
+                  onChange={(e) => setEditDfTopic(e.target.value)}
+                  placeholder="Topic of forum"
+                  className="input-field text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Mark Participants Attended:
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-surface-border rounded-lg p-2 space-y-1 bg-surface-secondary/30">
+                  {people
+                    .filter((p) => !editDfUnitId || p.currentUnitId?._id === editDfUnitId || p.currentUnitId === editDfUnitId)
+                    .map((p) => {
+                      const isAttended = editDfAttendees.includes(p._id);
+                      return (
+                        <button
+                          key={p._id}
+                          type="button"
+                          onClick={() => toggleAttendee(p._id, editDfAttendees, setEditDfAttendees)}
+                          className={`flex w-full items-center justify-between p-1.5 rounded text-xs transition-colors ${
+                            isAttended
+                              ? 'bg-brand-red text-white font-semibold'
+                              : 'hover:bg-white text-typography-main'
+                          }`}
+                        >
+                          <span>{p.fullName} ({p.currentStage})</span>
+                          {isAttended && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Comments / Minutes
+                </label>
+                <textarea
+                  rows={2}
+                  value={editDfComments}
+                  onChange={(e) => setEditDfComments(e.target.value)}
+                  placeholder="Minutes of the forum..."
+                  className="input-field text-xs resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditDfOpen(false)}
+                  className="btn-secondary text-xs py-2"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary text-xs py-2">
+                  Update Dialogue Forum
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Edit GM Modal */}
+      {editGmOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm overflow-y-auto">
+          <div className="w-full max-w-md rounded-xl border border-surface-border bg-white p-6 shadow-xl my-8 space-y-4">
+            <h3 className="font-bold text-base text-typography-main">Edit Group Meeting</h3>
+
+            <form onSubmit={handleUpdateGm} className="space-y-3">
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Unit *
+                </label>
+                <select
+                  required
+                  value={editGmUnitId}
+                  onChange={(e) => setEditGmUnitId(e.target.value)}
+                  className="input-field text-xs"
+                >
+                  {units.map((u) => (
+                    <option key={u._id} value={u._id}>
+                      {u.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="grid grid-cols-2 gap-2">
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">
+                    Date *
+                  </label>
+                  <input
+                    type="date"
+                    required
+                    value={editGmDate}
+                    onChange={(e) => setEditGmDate(e.target.value)}
+                    className="input-field text-xs"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs font-semibold text-typography-main mb-1">
+                    Facilitator
+                  </label>
+                  <select
+                    value={editGmFacilitatorId}
+                    onChange={(e) => setEditGmFacilitatorId(e.target.value)}
+                    className="input-field text-xs"
+                  >
+                    <option value="">None</option>
+                    {people.map((p) => (
+                      <option key={p._id} value={p._id}>
+                        {p.fullName}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Topic (Optional)
+                </label>
+                <input
+                  type="text"
+                  value={editGmTopic}
+                  onChange={(e) => setEditGmTopic(e.target.value)}
+                  placeholder="Topic of discussion"
+                  className="input-field text-xs"
+                />
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Mark Participants Attended:
+                </label>
+                <div className="max-h-40 overflow-y-auto border border-surface-border rounded-lg p-2 space-y-1 bg-surface-secondary/30">
+                  {people
+                    .filter((p) => !editGmUnitId || p.currentUnitId?._id === editGmUnitId || p.currentUnitId === editGmUnitId)
+                    .map((p) => {
+                      const isAttended = editGmAttendees.includes(p._id);
+                      return (
+                        <button
+                          key={p._id}
+                          type="button"
+                          onClick={() => toggleAttendee(p._id, editGmAttendees, setEditGmAttendees)}
+                          className={`flex w-full items-center justify-between p-1.5 rounded text-xs transition-colors ${
+                            isAttended
+                              ? 'bg-brand-red text-white font-semibold'
+                              : 'hover:bg-white text-typography-main'
+                          }`}
+                        >
+                          <span>{p.fullName} ({p.currentStage})</span>
+                          {isAttended && <CheckCircle2 className="h-3.5 w-3.5" />}
+                        </button>
+                      );
+                    })}
+                </div>
+              </div>
+
+              <div>
+                <label className="block text-xs font-semibold text-typography-main mb-1">
+                  Comments
+                </label>
+                <textarea
+                  rows={2}
+                  value={editGmComments}
+                  onChange={(e) => setEditGmComments(e.target.value)}
+                  placeholder="Meeting notes..."
+                  className="input-field text-xs resize-none"
+                />
+              </div>
+
+              <div className="flex items-center justify-end gap-2 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setEditGmOpen(false)}
+                  className="btn-secondary text-xs py-2"
+                >
+                  Cancel
+                </button>
+                <button type="submit" className="btn-primary text-xs py-2">
+                  Update Group Meeting
                 </button>
               </div>
             </form>

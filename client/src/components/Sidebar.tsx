@@ -13,11 +13,13 @@ import {
   FileText,
   Building2,
   Settings,
-  ShieldCheck
+  ShieldCheck,
+  Sparkles
 } from 'lucide-react';
 
 const navItems = [
   { label: 'Dashboard', path: '/', icon: LayoutDashboard },
+  { label: 'AI Assistant', path: '/ai', icon: Sparkles },
   { label: 'People', path: '/people', icon: Users },
   { label: 'Individual Meetings', path: '/meetings', icon: CalendarCheck },
   { label: 'DMM Planning', path: '/dmm', icon: Target },

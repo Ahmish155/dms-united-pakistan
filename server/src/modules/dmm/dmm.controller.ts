@@ -47,4 +47,37 @@ export class DmmController {
       next(error);
     }
   }
+
+  static async updateDmm(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await DmmService.updateDmm(
+        req.workspaceId!,
+        req.params.id,
+        req.body,
+        req.user!.id
+      );
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
+
+  static async deleteDmm(req: Request, res: Response, next: NextFunction) {
+    try {
+      const result = await DmmService.deleteDmm(
+        req.workspaceId!,
+        req.params.id,
+        req.user!.id
+      );
+      return res.status(200).json({
+        success: true,
+        data: result
+      });
+    } catch (error) {
+      next(error);
+    }
+  }
 }

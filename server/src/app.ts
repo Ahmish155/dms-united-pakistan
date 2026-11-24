@@ -16,6 +16,7 @@ import { gmRoutes } from './modules/gm/gm.routes';
 import { reportRoutes } from './modules/reports/report.routes';
 import { settingsRoutes } from './modules/settings/settings.routes';
 import { activityRoutes } from './modules/activity-engine/activity.routes';
+import { aiRoutes } from './modules/ai/ai.routes';
 import { errorHandler } from './middleware/errorHandler';
 
 const app = express();
@@ -72,6 +73,7 @@ app.use('/api/v1/gm', gmRoutes);
 app.use('/api/v1/reports', reportRoutes);
 app.use('/api/v1/settings', settingsRoutes);
 app.use('/api/v1/activity', activityRoutes);
+app.use('/api/v1/ai', aiRoutes);
 
 // Error Handling
 app.use(errorHandler);
